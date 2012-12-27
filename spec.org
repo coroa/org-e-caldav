@@ -1,0 +1,114 @@
+Specification
+
+* items
+** events
+** todos
+
+* customize
+
+* org-e-caldav
+** org-e-caldav-files
+'org-agenda-files
+** calendar (list)
+*** name (required)
+**** string
+*** caldav url (required)
+https://user:pass@server/url/calid/
+*** target
+'(file+datetree (concat org-directory "/events.org"))
+*** tags
+org-mode tags every item from this calendar has. All items with all
+these tags will be synced to the remote calendar.
+
+default: ":$name:"
+
+** calendar (list)
+#+begin_src emacs-lisp
+  ;; default setting
+  (setq org-e-caldav-sync-file-list nil
+        org-e-caldav-files 'org-agenda-files
+        org-e-caldav-default-target '(file+datetree (concat org-directory "events.org"))
+        org-e-caldav-default-query-change-behaviour prompt)
+  
+  ;; sync events from all org-e-caldav-files. new remote events are
+  ;; filed using org-e-caldav-default-target, no local or remote filters
+  ;; are applied
+  (setq org-e-caldav-calendars
+        '((:name mycalid
+                 :remote-url "https://user:pass@server/url/calid/")))
+  
+  ;; sync events from all org-e-caldav-files. new remote events are
+  ;; filed using org-e-caldav-default-target and receive the tags
+  ;; :a:b:c:. Local events are filtered to match all tags :a:b:c:,
+  (setq org-e-caldav-calendars
+        '((:name mycalid
+                 :remote-url "https://user:pass@server/url/calid/"
+                 :local-tags ("a" "b" "c"))))
+  
+  ;; multiple calendars
+  (setq org-e-caldav-calendars
+        '((:name mycal1
+                 :remote-url "https://user:pass@server/url/cal1/"
+                 :local-tags ("a" "b" "c"))
+          (:name mycal2
+                 :remote-url "https://user:pass@server/url/cal2/"
+                 :local-tags ("d"))
+          (:name mycal3
+                 :remote-url "https://user:pass@server/url/cal3/"
+                 :local-tags ("e")
+                 :target (file+headline "~/org/cal2.org" "Event"))))
+  
+  
+#+end_src
+
+* calendar defined in an org-mode file
+#+begin_src org
+  ,#+CALDAV_URL: https://user:pass@server/url/calid/
+  ,or:
+  ,#+PROPERTY: CALDAV_URL https://user:pass@server/url/calid/
+  ,#+CALDAV_TARGET: datetree
+  
+  ,* 2012
+  ,** 2012-03 March
+  ,*** 2012-03-02 Friday
+  ,**** Event 1
+  ,     <2012-03-02 Fri 14:00>
+  ,**** Event 2
+  ,     <2012-03-02 Fri 17:00>
+#+end_src
+
+* Use case
+** clocking information private
+*** private redmine with per project trackers (and subtrackers)
+**** clocking information
+*** public github issues tracker
+**** no clocking information
+** one file one caldav
+** agenda files one caldav (subset of events via query)
+
+* functions
+** org-e-caldav-sync (non-prompting)
+*** org-e-caldav-sync-files
+*** org-e-caldav-sync-calendars
+** org-e-caldav-sync-file (flag for non-prompting)
+sync caldav
+query info if missing
+add to sync list?
+add to agenda?
+** org-e-caldav-sync-files
+iterate over files with org-e-caldav-sync-file
+** org-e-caldav-sync-calendars
+*** calendar
+**** name
+**** local query 
+***** files
+***** filter
+****** tags
+***** target, fallback to org-e-caldav-default-target
+**** remote query
+***** url
+***** filter
+****** category/tags
+****** newer than
+****** CONTAINS
+**** filter changes
