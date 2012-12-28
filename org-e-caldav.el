@@ -65,6 +65,7 @@
 
 (require 'url-dav)
 (require 'icalendar)
+(require 'org-element)
 (require 'org-e-icalendar)
 
 (defvar org-e-caldav-url "https://www.google.com/calendar/dav"
@@ -292,7 +293,7 @@ update the first found property drawer underneath."
   
   (if (null elem)
       `(property-drawer nil
-                        ,(mapcar
+                        ,@(mapcar
                           (lambda (x) `(node-property (:key ,(car x) :value ,(cdr x))))
                           alist))
     (let* ((drawer (org-e-caldav-find-property-drawer elem))
@@ -304,14 +305,14 @@ update the first found property drawer underneath."
                                   (org-element-put-property x :value (cdr y))
                                   (puthash (car y) t added)))))
 
-      (org-element-adopt-elements drawer
-                                  (loop for (key . val) in alist
-                                        unless (gethash key added)
-                                        collect `(node-property (:key ,key :value ,val)))))))
+      (apply 'org-element-adopt-elements drawer
+             (loop for (key . val) in alist
+                   unless (gethash key added)
+                   collect `(node-property (:key ,key :value ,val)))))))
 
 (defun org-e-caldav-event-to-headline (event &optional headline)
-  "Create a new headline or update an existing one. Returns the
-innermost changed org-element structure."
+  "Create a new org-element headline or update an existing
+one. Returns the innermost changed org-element structure."
   (let ((drawer-alist `((,org-e-caldav-uid-property . ,(plist-get event :uid))
                         (sync . ,(plist-get event :sync))))
         (summary (plist-get event :summary))
@@ -320,10 +321,10 @@ innermost changed org-element structure."
     
     (if (null headline)
         `((headline (:title ,summary)
-                    ((section nil                            
-                              (,(org-e-caldav-alist-to-property-drawer drawer-alist)
-                               ,timestamp
-                               ,description)))))
+                    (section nil                            
+                             ,(org-e-caldav-alist-to-property-drawer drawer-alist)
+                             ,timestamp
+                             ,description)))
       
       ;; XXX how do we update the description???
       ;; replace the first section completely by the the literal text
@@ -368,7 +369,7 @@ property :headline contains the associated org-element structure."
           `(:uid ,uid
                  :timestamp ,timestamp
                  :summary ,(org-e-caldav-strip-text-properties
-                            (org-element-property :title headline))
+                            (car (org-element-property :title headline)))
                  :description ,(org-e-caldav-extract-description-from-headline
                                 headline timestamp)
                  :sync ,(cdr (assoc :sync prop-alist))
@@ -384,7 +385,7 @@ match for which FUN doesn't return nil and return that value."
                (funcall fun parent))
           (org-element-closest parent types fun)))))
 
-(defun org-element-update-buffer updates
+(defun org-element-update-buffer (updates)
   "Updates the current buffer according to the list updates,
 which has the form '( elem1 elem2 elem3 ... ). Nested elements
 are ignored.
@@ -393,7 +394,7 @@ Assumes the :begin :end properties of the elems correspond to the
 buffer state.  XXX: overlays have to be treated
 specifically. Refer to org-element-swap-A-B f.ex."
   (save-excursion
-    (let ((sorted-by-beg (sort updates
+    (let ((sorted-by-beg (sort (copy-sequence updates)
                                (lambda (a b) (>= (org-element-property :begin a)
                                             (org-element-property :begin b)))))
           (sorted-by-end (sort updates
@@ -402,9 +403,9 @@ specifically. Refer to org-element-swap-A-B f.ex."
 
       (while sorted-by-end
         (let* ((elem (car sorted-by-end))
-               (skip (+ (position elem sorted-by-beg) 1))
-               (beg (org-element-property :begin a))
-               (end (org-element-property :end a)))
+               (skip (1+ (position elem sorted-by-beg)))
+               (beg (org-element-property :begin elem))
+               (end (org-element-property :end elem)))
                     
           (setq sorted-by-end (nthcdr skip sorted-by-end)
                 sorted-by-beg (nthcdr skip sorted-by-beg))
@@ -526,7 +527,7 @@ where the ev are normal events."
               (push lev news))
              ((and rpair
                    (null (plist-get lev :sync))
-                   (os-event-diff lev rev))
+                   (org-e-caldav-event-diff lev rev))
               (push (cons (plist-put (copy-sequence lev) :sync 'conflict-local)
                           (plist-put (copy-sequence rev) :sync 'conflict-remote)) conflicts))
              ((null lev)
@@ -633,7 +634,10 @@ where the ev are normal events."
   (let ((uid (plist-get event :uid)))
     (url-dav-save-resource
      (concat (org-e-caldav-events-url) uid ".ics")
-     (encode-coding-string (org-e-caldav-event-to-ical event) 'utf-8) "text/calendar; charset=UTF-8")
+     (encode-coding-string
+      (concat "BEGIN:VCALENDAR\n"
+              (org-e-caldav-event-to-ical event)
+              "END:VCALENDAR\n") 'utf-8) "text/calendar; charset=UTF-8")
     uid))
 
 (defun org-e-caldav-merge-local (event local local-doc-updates-add &optional inbox)
@@ -669,15 +673,16 @@ changes."
     (plist-put event :uid uid)
     (org-e-caldav-merge-remote event)
     
-    (setq drawer (org-e-caldav-alist-to-property-drawer `(uid . ,uid) drawer))
+    (setq drawer (org-e-caldav-alist-to-property-drawer `(("uid" . ,uid)) drawer))
     (funcall local-doc-updates-add
              (if (null (org-element-property :parent drawer))
-                 (let ((section (or (org-element-map 'section 'identity nil t 'headline)
+                 (let ((section (or (car (org-element-contents headline))
                                     headline)))
-                   (org-element-set-contents
-                    section
-                    (cons (org-element-put-property drawer :parent section)
-                          (org-element-get-contents section))))
+                   (apply 'org-element-set-contents      
+                          section
+                          (org-element-put-property drawer :parent section)
+                          (org-element-contents section))
+                   section)
                drawer))
     uid))
 
