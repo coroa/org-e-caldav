@@ -249,9 +249,9 @@ event."
             (when last-update
               `(("If-Modified-Since" . ,(url-get-normalized-date last-update))))))
       
-      (with-current-buffer (url-retrieve-synchronously
-                            (concat (org-e-caldav-events-url) (concat uid ".ics")))
-        
+      (with-current-buffer (flet ((url-cache-extract (x) nil))
+                             (url-retrieve-synchronously
+                              (concat (org-e-caldav-events-url) (concat uid ".ics"))))
         (case url-http-response-status
           (304 (assoc uid (plist-get state :events)))
           (200 (delete-region
@@ -320,11 +320,11 @@ one. Returns the innermost changed org-element structure."
         (timestamp (plist-get event :timestamp)))
     
     (if (null headline)
-        `((headline (:title ,summary)
-                    (section nil                            
-                             ,(org-e-caldav-alist-to-property-drawer drawer-alist)
-                             ,timestamp
-                             ,description)))
+        `(headline (:title ,summary)
+                   (section nil                            
+                            ,(org-e-caldav-alist-to-property-drawer drawer-alist)
+                            ,timestamp
+                            ,description))
       
       ;; XXX how do we update the description???
       ;; replace the first section completely by the the literal text
@@ -364,7 +364,7 @@ been temporarily removed."
   "Return event structure for a headline. An additional
 property :headline contains the associated org-element structure."
   (let* ((prop-alist (org-e-caldav-property-drawer-to-alist headline))
-         (uid (cdr (assoc :uid prop-alist))))
+         (uid (cdr (assoc "uid" prop-alist))))
     (cons uid
           `(:uid ,uid
                  :timestamp ,timestamp
@@ -372,7 +372,7 @@ property :headline contains the associated org-element structure."
                             (car (org-element-property :title headline)))
                  :description ,(org-e-caldav-extract-description-from-headline
                                 headline timestamp)
-                 :sync ,(cdr (assoc :sync prop-alist))
+                 :sync ,(cdr (assoc "sync" prop-alist))
                  :headline ,headline))))
 
 (defun org-element-closest (elem types fun)
@@ -438,8 +438,8 @@ represented by a headline containing an active timestamp."
                      :month-end
                      :day-end
                      :minute-end)       ; XXX add repeater stuff
-        unless (equal (plist-get a key)
-                      (plist-get b key))
+        unless (equal (org-element-property key a)
+                      (org-element-property key b))
         return t))
 
 ;;; practically literally from os.el by Aurélien Aptel
@@ -582,7 +582,7 @@ where the ev are normal events."
                                 (mapcar (lambda (x) (org-e-caldav-fetch-event x state))
                                         (if (equal file org-e-caldav-inbox)
                                             (funcall filter (org-e-caldav-fetch-eventlist))
-                                          (plist-get local :events))))))
+                                          (mapcar (lambda (x) (car x)) (plist-get local :events)))))))
                (local-diff (org-e-caldav-eventlist-diff state local))
                (remote-diff (org-e-caldav-eventlist-diff state remote))
                (merge (org-e-caldav-prepare-merge local-diff remote-diff))
@@ -603,17 +603,23 @@ where the ev are normal events."
         (loop for pair in (plist-get local :events)
               if (null (car pair))
               do (setcar pair (plist-get (cdr pair) :uid)))
+
         (org-element-update-buffer local-doc-updates)
+        (mapc (lambda (x) (org-element-put-property (plist-get (cdr x) :timestamp)
+                                               :parent nil))
+              (plist-get local :events))
         (org-e-caldav-set-state file (plist-put local :date-state (current-time)))
         (message "Synchronization of file \"%s\" complete." file)))))
 
 (defun org-e-caldav-sync ()
   (interactive)
-  (let ((updated (make-hash-table))
-        (filter-append (lambda (&rest x) (mapc (lambda (y) (puthash y t updated)) x)))
+  (let ((updated (make-hash-table :test 'equal))
+        (filter-append (lambda (&rest x)
+                         (mapc (lambda (y)
+                                 (mapc (lambda (z) (puthash z t updated)) y)) x)))
         (filter (lambda (x) (delq nil (mapcar (lambda (y) (unless (gethash y updated) y)) x))))
         deleted
-        (delete-append (lambda (&rest x) (mapc (lambda (y) (setq deleted (append y deleted))) x)))
+        (delete-append (lambda (&rest x) (setq deleted (apply 'append deleted x))))
         conflicts)
     (mapc (lambda (file)
             (unless (equal file org-e-caldav-inbox)
@@ -621,23 +627,25 @@ where the ev are normal events."
                              (org-e-caldav-sync-file file filter filter-append delete-append)
                              nil)))
                 (when confs (push (cons file confs) conflicts)))))
-          org-e-caldav-files))
+          org-e-caldav-files)
 
-  (org-e-caldav-sync-file org-e-caldav-inbox filter filter-append delete-append)
-  (mapc 'org-e-caldav-delete-event (funcall filter deleted))
+    (org-e-caldav-sync-file org-e-caldav-inbox filter filter-append delete-append)
+    (mapc 'org-e-caldav-delete-event (funcall filter deleted))
 
-  (org-e-caldav-show-conflicts conflicts))
+    ;; (org-e-caldav-show-conflicts conflicts)
+    ))
 
 
 (defun org-e-caldav-merge-remote (event)
   "Write a local change to a remote resource."
   (let ((uid (plist-get event :uid)))
-    (url-dav-save-resource
-     (concat (org-e-caldav-events-url) uid ".ics")
-     (encode-coding-string
-      (concat "BEGIN:VCALENDAR\n"
-              (org-e-caldav-event-to-ical event)
-              "END:VCALENDAR\n") 'utf-8) "text/calendar; charset=UTF-8")
+    (unless (url-dav-save-resource
+         (concat (org-e-caldav-events-url) uid ".ics")
+         (encode-coding-string
+          (concat "BEGIN:VCALENDAR\n"
+                  (org-e-caldav-event-to-ical event)
+                  "END:VCALENDAR\n") 'utf-8) "text/calendar; charset=UTF-8")
+       (error "Couldn't upload event %s" uid))
     uid))
 
 (defun org-e-caldav-merge-local (event local local-doc-updates-add &optional inbox)
@@ -648,7 +656,7 @@ changes."
          (lev (cdr lpair))
          (headline (plist-get lev :headline)))
     
-    (local-doc-updates-add
+    (funcall local-doc-updates-add
      (if (null lev)
          (org-element-adopt-elements inbox
                                      (org-e-caldav-event-to-headline event))
