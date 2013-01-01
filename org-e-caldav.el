@@ -90,36 +90,36 @@ entries.")
 (defvar org-e-caldav-uid-property "CALDAVUID"
   "Property name in which to save the associated CAL ")
 
-;; Internal cache variables
+;; Internal state variables
 
-;;; The following cache definitions and functions come literally from
+;;; The following state definitions and functions come literally from
 ;;; os.el, written by Aurélien Aptel
 
-(defvar org-e-caldav-cache-file (concat user-emacs-directory "org-e-caldav-cache")
-  "Path to org-e-caldav cache file.")
+(defvar org-e-caldav-state-file (concat user-emacs-directory "org-e-caldav-state")
+  "Path to org-e-caldav state file.")
 
-(defvar org-e-caldav-cache-alist nil)
+(defvar org-e-caldav-state-alist nil)
 
-(defun org-e-caldav-set-cache (file eventlist)
-  "Update FILE to EVENTLIST in `org-e-caldav-cache-alist'."
-  (let ((cell (assoc file org-e-caldav-cache-alist)))
+(defun org-e-caldav-set-state (file eventlist)
+  "Update FILE to EVENTLIST in `org-e-caldav-state-alist'."
+  (let ((cell (assoc file org-e-caldav-state-alist)))
     (if cell
         (setcdr cell eventlist)
-      (push (cons file eventlist) org-e-caldav-cache-alist))))
+      (push (cons file eventlist) org-e-caldav-state-alist))))
 
-(defun org-e-caldav-get-cache (file)
-  "Return the EVENTLIST for FILE in cache or nil."
-    (cdr (assoc file org-e-caldav-cache-alist)))
+(defun org-e-caldav-get-state (file)
+  "Return the EVENTLIST for FILE in state or nil."
+    (cdr (assoc file org-e-caldav-state-alist)))
 
-(defun org-e-caldav-write-cache ()
-  "Write org-e-caldav cache to `org-e-caldav-cache-file'."
-  (with-temp-file org-e-caldav-cache-file
-    (prin1 `(setq org-e-caldav-cache-alist ',org-e-caldav-cache-alist)
+(defun org-e-caldav-write-state ()
+  "Write org-e-caldav state to `org-e-caldav-state-file'."
+  (with-temp-file org-e-caldav-state-file
+    (prin1 `(setq org-e-caldav-state-alist ',org-e-caldav-state-alist)
            (current-buffer))))
 
-(defun org-e-caldav-load-cache ()
-  "Load org-e-caldav cache from `org-e-caldav-cache-file'."
-  (load org-e-caldav-cache-file 'noerror nil))
+(defun org-e-caldav-load-state ()
+  "Load org-e-caldav state from `org-e-caldav-state-file'."
+  (load org-e-caldav-state-file 'noerror nil))
 
 ;;; A few functions from org-caldav.el by David Engster
 
@@ -242,9 +242,9 @@ event."
                            (plist-get event :description)
                            nil))
 
-(defun org-e-caldav-fetch-event (uid cache)
+(defun org-e-caldav-fetch-event (uid state)
   (when uid
-    (let* ((last-update (plist-get cache :date-cache))
+    (let* ((last-update (plist-get state :date-state))
            (url-request-extra-headers
             (when last-update
               `(("If-Modified-Since" . ,(url-get-normalized-date last-update))))))
@@ -253,7 +253,7 @@ event."
                             (concat (org-e-caldav-events-url) (concat uid ".ics")))
         
         (case url-http-response-status
-          (301 (assoc uid (plist-get cache :events)))
+          (304 (assoc uid (plist-get state :events)))
           (200 (delete-region
                 (point-min)
                 (progn (goto-char url-http-end-of-headers)
@@ -561,7 +561,7 @@ where the ev are normal events."
         (when (org-e-caldav-eventlist-dups local)
           (error "Sync file \"%s\" contains unmerged events." file))
 
-        ;; local          cache          remote
+        ;; local          state          remote
         ;;    \          /    \          /
         ;;    parse    load   load     fetch
         ;;      \      /        \      /
@@ -574,17 +574,17 @@ where the ev are normal events."
         ;;                 v
         ;;              merged
         ;;                 v
-        ;;        new cache/local/remote
+        ;;        new state/local/remote
 
-        (let* ((cache (org-e-caldav-get-cache file))
+        (let* ((state (org-e-caldav-get-state file))
                (remote `(:events
                          ,(delq nil
-                                (mapcar (lambda (x) (org-e-caldav-fetch-event (car x) cache))
+                                (mapcar (lambda (x) (org-e-caldav-fetch-event x state))
                                         (if (equal file org-e-caldav-inbox)
                                             (funcall filter (org-e-caldav-fetch-eventlist))
                                           (plist-get local :events))))))
-               (local-diff (org-e-caldav-eventlist-diff cache local))
-               (remote-diff (org-e-caldav-eventlist-diff cache remote))
+               (local-diff (org-e-caldav-eventlist-diff state local))
+               (remote-diff (org-e-caldav-eventlist-diff state remote))
                (merge (org-e-caldav-prepare-merge local-diff remote-diff))
                (conflicts (plist-get merge :conflicts))
                (inbox (when (equal file org-e-caldav-inbox) local-doc)))
@@ -603,8 +603,8 @@ where the ev are normal events."
         (loop for pair in (plist-get local :events)
               if (null (car pair))
               do (setcar pair (plist-get (cdr pair) :uid)))
-        (org-e-caldav-set-cache file (plist-put local :date-cache (current-time)))
         (org-element-update-buffer local-doc-updates)
+        (org-e-caldav-set-state file (plist-put local :date-state (current-time)))
         (message "Synchronization of file \"%s\" complete." file)))))
 
 (defun org-e-caldav-sync ()
