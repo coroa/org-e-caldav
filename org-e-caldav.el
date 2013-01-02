@@ -357,8 +357,9 @@ been temporarily removed."
 
 (defun org-e-caldav-strip-text-properties (text)
   "Remove the text properties connected to a string object"
-  (set-text-properties 0 (length text) nil text)
-  text)
+  (let ((ret (copy-sequence text)))
+    (set-text-properties 0 (length ret) nil ret)
+    ret))
 
 (defun org-e-caldav-headline-to-event (headline timestamp)
   "Return event structure for a headline. An additional
