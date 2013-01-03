@@ -489,28 +489,23 @@ represented by a headline containing an active timestamp."
                       (org-element-property key b))
         return t))
 
-;;; practically literally from os.el by Aurélien Aptel
-
 (defun org-e-caldav-event-diff (a b)
   "Return an alist of properties that differ in A and B or nil if A = B.
 The form of the alist is ((:property . (valueA valueB)...)"
-  (let (diff)
-    (append
-     (dolist (key '(:summary
-                    :description) diff)
-       (let ((va (plist-get a key))
-             (vb (plist-get b key)))
-         (unless (equal va vb)
-           (push `(,key . (,va ,vb)) diff))))
-     (let ((ta (plist-get a :timestamp))
-           (tb (plist-get b :timestamp)))
-       (when (org-e-caldav-timestamp-diff ta tb)
-         `((:timestamp . (,ta ,tb))))))))
+  (append
+   (let ((ta (plist-get a :timestamp))
+         (tb (plist-get b :timestamp)))
+     (when (org-e-caldav-timestamp-diff ta tb)
+       `((:timestamp . (,ta ,tb)))))
+   (loop for key in '(:summary :description)
+         as va = (plist-get a key)
+         as vb = (plist-get b key)
+         unless (equal va vb)
+         collect `(,key . (,va ,vb)))))
 
 (defun org-e-caldav-eventlist-diff (a b)
   "Return a diff eventlist which turns eventlist A to B when applied."
-  (let* (diff
-         (a-evs (plist-get a :events))
+  (let* ((a-evs (plist-get a :events))
          (b-evs (plist-get b :events))
          (uid-list
           (append
@@ -520,13 +515,13 @@ The form of the alist is ((:property . (valueA valueB)...)"
     (delete-dups uid-list)
 
     (append
-     (dolist (uid uid-list diff)
-       (let ((aev (cdr (assoc uid a-evs)))
-             (bev (cdr (assoc uid b-evs))))
-         (when (or (null aev)
-                   (null bev)
-                   (org-e-caldav-event-diff aev bev))
-           (push (cons uid bev) diff))))
+     (loop for uid in uid-list
+           as aev = (cdr (assoc uid a-evs))
+           as bev = (cdr (assoc uid b-evs))
+           if (or (null aev)
+                  (null bev)
+                  (org-e-caldav-event-diff aev bev))
+           collect (cons uid bev))
      (loop for (uid . ev) in b-evs
            if (null uid) collect (cons nil ev)))))
 
