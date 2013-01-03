@@ -234,13 +234,17 @@ which can be fed into `org-e-caldav-insert-org-entry'."
 (defun org-e-caldav-event-to-ical (event)
   "Generate and return the ical equivalent to the event structure
 event."
-  (org-e-icalendar--vevent (plist-get event :headline)
-                           (plist-get event :timestamp)
-                           (plist-get event :uid)
-                           (plist-get event :summary)
-                           nil
-                           (plist-get event :description)
-                           nil))
+  (let ((description (plist-get event :description)))
+    (while (string-match "\n" description)
+      (setq description (replace-match "\\n" t t description)))
+    
+    (org-e-icalendar--vevent (plist-get event :headline)
+                             (plist-get event :timestamp)
+                             (plist-get event :uid)
+                             (plist-get event :summary)
+                             nil
+                             description
+                             nil)))
 
 (defun org-e-caldav-fetch-event (uid state)
   (when uid
@@ -645,7 +649,7 @@ where the ev are normal events."
          (encode-coding-string
           (concat "BEGIN:VCALENDAR\n"
                   (org-e-caldav-event-to-ical event)
-                  "END:VCALENDAR\n") 'utf-8) "text/calendar; charset=UTF-8")
+                  "END:VCALENDAR\n") 'utf-8-dos) "text/calendar; charset=UTF-8")
        (error "Couldn't upload event %s" uid))
     uid))
 
