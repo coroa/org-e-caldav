@@ -629,7 +629,7 @@ where the ev are normal events."
                (remote-diff (org-e-caldav-eventlist-diff state remote))
                (merge (org-e-caldav-prepare-merge local-diff remote-diff))
                (conflicts (plist-get merge :conflicts))
-               (inbox (when (equal file org-e-caldav-inbox) local-doc)))
+               (inbox (when (equal file org-e-caldav-inbox) (cons local-doc 1))))
 
           (if conflicts (throw 'conflict conflicts))
 
@@ -699,10 +699,17 @@ changes."
          (headline (plist-get lev :headline)))
     
     (funcall local-doc-updates-add
-     (if (null lev)
-         (org-element-adopt-elements inbox
-                                     (org-e-caldav-event-to-headline event))
-       (org-e-caldav-event-to-headline event headline)))
+             (cond
+              ((plist-get event :delete)
+               (let ((parent (org-element-property :parent lev)))
+                 (when parent
+                   (apply 'org-element-set-contents parent
+                          (delq lev (org-element-get-contents parent))))))
+              ((null lev)
+               (org-element-adopt-elements
+                (car inbox) (org-e-caldav-event-to-headline event nil (cdr inbox))))
+              (t
+               (org-e-caldav-event-to-headline event headline))))
 
     (if lpair
         ;; as event was part of remote we need to update the local ones
