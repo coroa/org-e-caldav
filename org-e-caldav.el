@@ -314,33 +314,47 @@ update the first found property drawer underneath."
                    unless (gethash key added)
                    collect `(node-property (:key ,key :value ,val)))))))
 
-(defun org-e-caldav-event-to-headline (event &optional headline)
+(defun org-e-caldav-event-to-headline (event &optional headline level)
   "Create a new org-element headline or update an existing
 one. Returns the innermost changed org-element structure."
-  (let ((drawer-alist `((,org-e-caldav-uid-property . ,(plist-get event :uid))
-                        (sync . ,(plist-get event :sync))))
+  (let ((drawer-alist `((,org-e-caldav-uid-property . ,(plist-get event :uid))))
         (summary (plist-get event :summary))
         (description (plist-get event :description))
         (timestamp (plist-get event :timestamp)))
+
+    (when (plist-get event :sync)
+      (push (sync . (plist-get event :sync)) drawer-alist))
     
     (if (null headline)
-        `(headline (:title ,summary)
-                   (section nil                            
-                            ,(org-e-caldav-alist-to-property-drawer drawer-alist)
-                            ,timestamp
-                            ,description))
+        (if (numberp level)
+            `(headline (:title ,summary :level ,level)
+                       (section nil                          
+                                ,(org-e-caldav-alist-to-property-drawer drawer-alist)
+                                ,timestamp
+                                ,description))
+          (error "Need a headline level to create a new headline."))
       
-      ;; XXX how do we update the description???
-      ;; replace the first section completely by the the literal text
-      ;; for now. hacky?
-      (let ((drawer (org-e-caldav-find-property-drawer headline))
-            (section (org-element-map headline 'section 'identity nil t 'headline)))
-        (org-element-set-contents section
-                                  (org-e-caldav-alist-to-property-drawer
-                                   drawer-alist drawer)
-                                  timestamp
-                                  description)
-        (if (not (equal summary (org-element-property :title headline)))
+      (let* ((section (org-element-map (cons 'org-data (cdr headline))
+                                       'section 'identity nil t 'headline))
+             basket (basket-add (lambda (x) (push x basket)))
+             (old-description (org-e-caldav-extract-description-from-section section basket-add))
+             (old-drawer (assoc 'property-drawer basket))
+             (new-drawer (org-e-caldav-alist-to-property-drawer drawer-alist old-drawer))
+             (old-timestamp (assoc 'timestamp basket))
+             (new-contents (if (equal description old-description)
+                               (org-element-contents section)
+                             (nconc basket (list description)))))
+
+        (org-element-put-property timestamp :parent (org-element-property :parent old-timestamp))
+        (setcdr old-timestamp (cdr timestamp))
+
+        (unless (org-element-property :parent new-drawer)
+          (push (org-element-put-property new-drawer :parent section) new-contents))
+
+        (apply 'org-element-set-contents section new-contents)
+        
+        (if (not (equal summary (org-e-caldav-strip-text-properties
+                                 (car (org-element-property :title headline)))))
             (org-element-put-property headline :title summary)
           section)))))
 
@@ -350,7 +364,7 @@ one. Returns the innermost changed org-element structure."
     (plain-list item)
     (item paragraph plain-list)))
 
-(defun org-e-caldav-normalize-description (elem)
+(defun org-e-caldav-normalize-description (elem &optional basket-add)
   "Constructs a minimal representation of the same object using
   org-e-caldav-restriction and caches it in the org-e-caldav-
   normalized-element-cache hash."
@@ -359,21 +373,20 @@ one. Returns the innermost changed org-element structure."
          (contents (cddr elem))
          (restriction (assoc type org-e-caldav-normalize-description-restriction)))
     (cons type
-          (cons 
+          (cons
            properties
            (loop for c in contents
                  if (stringp c)
                  collect (org-e-caldav-strip-text-properties c)
                  else if (memq (car c) (cdr restriction))
-                 collect (org-e-caldav-normalize-description c))))))
+                 collect (org-e-caldav-normalize-description c basket-add)
+                 else if basket-add
+                 do (funcall basket-add c))))))
 
-(defun org-e-caldav-extract-description-from-headline (headline timestamp)
-  "Return the interpreted first section, where the timestamp has
-been temporarily removed."
-  (let* ((section (car (org-element-contents headline)))
-         (normalized-section (org-e-caldav-normalize-description section)))
-        
-    (org-element-interpret-data normalized-section)))
+(defun org-e-caldav-extract-description-from-section (section &optional basket-add)
+  "Return the interpreted first section."
+  (org-element-interpret-data
+   (org-e-caldav-normalize-description section basket-add)))
 
 (defun org-e-caldav-strip-text-properties (text)
   "Remove the text properties connected to a string object"
@@ -385,14 +398,14 @@ been temporarily removed."
   "Return event structure for a headline. An additional
 property :headline contains the associated org-element structure."
   (let* ((prop-alist (org-e-caldav-property-drawer-to-alist headline))
-         (uid (cdr (assoc "uid" prop-alist))))
+         (uid (cdr (assoc org-e-caldav-uid-property prop-alist))))
     (cons uid
           `(:uid ,uid
                  :timestamp ,timestamp
                  :summary ,(org-e-caldav-strip-text-properties
                             (car (org-element-property :title headline)))
-                 :description ,(org-e-caldav-extract-description-from-headline
-                                headline timestamp)
+                 :description ,(org-e-caldav-extract-description-from-section
+                                (car (org-element-contents headline)))
                  :sync ,(cdr (assoc "sync" prop-alist))
                  :headline ,headline))))
 
