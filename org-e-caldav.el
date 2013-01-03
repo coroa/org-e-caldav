@@ -704,8 +704,13 @@ changes."
                                      (org-e-caldav-event-to-headline event))
        (org-e-caldav-event-to-headline event headline)))
 
-    ;; as event was part of remote we need to update the local ones
-    (setcdr lpair event)
+    (if lpair
+        ;; as event was part of remote we need to update the local ones
+        (setcdr lpair event)
+      (plist-put local :events
+                 (cons (cons uid event)
+                       (plist-get local :events))))
+    
     uid))
 
 (defun org-e-caldav-merge-new-remote (event local-doc-updates-add)
