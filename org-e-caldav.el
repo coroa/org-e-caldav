@@ -722,30 +722,20 @@ changes."
 
 (defun org-e-caldav-merge-new-remote (event local-doc-updates-add)
   (let* ((headline (plist-get event :headline))
-         (drawer (org-e-caldav-find-property-drawer headline))
          (uidlist (org-e-caldav-fetch-eventlist))
-         (uid
-          (loop for uid = (concat (format-time-string "%Y%m%dT%H%M%SZ" nil t)
-                                  (format "-%d@%s" (random 10000) system-name))
-                while (memq uid uidlist)
-                finally return uid)))
+         (uid (loop for uid = (concat (format-time-string "%Y%m%dT%H%M%SZ" nil t)
+                                      (format "-%d@%s" (random 10000) system-name))
+                    while (memq uid uidlist)
+                    finally return uid)))
     
     ;; event is an event from local, so that the side-effect change
     ;; effectively adds the uid also to an element in local
     (plist-put event :uid uid)
     (org-e-caldav-merge-remote event)
-    
-    (setq drawer (org-e-caldav-alist-to-property-drawer `(("uid" . ,uid)) drawer))
+
     (funcall local-doc-updates-add
-             (if (null (org-element-property :parent drawer))
-                 (let ((section (or (car (org-element-contents headline))
-                                    headline)))
-                   (apply 'org-element-set-contents      
-                          section
-                          (org-element-put-property drawer :parent section)
-                          (org-element-contents section))
-                   section)
-               drawer))
+             (org-e-caldav-event-to-headline event headline))
+    
     uid))
 
 (defun org-e-caldav-delete-event (uid)
