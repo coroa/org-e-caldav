@@ -204,32 +204,32 @@ which can be fed into `org-e-caldav-insert-org-entry'."
           (if (and dtend
                    (string=
                     (cadr (icalendar--get-event-property-attributes
-                            e 'DTEND))
+                           e 'DTEND))
                     "DATE"))
               (when start-t
                 `(:hour-end ,(plist-get start-t :hour-start)
-                              :minute-end ,(plist-get start-t :minute-start)))
-            '(:hour-end (nth 2 dtend-dec)
-                        :minute-end (nth 1 dtend-dec)))
+                            :minute-end ,(plist-get start-t :minute-start)))
+            `(:hour-end ,(nth 2 dtend-dec)
+                        :minute-end ,(nth 1 dtend-dec)))
           dtend-dec (if end-t dtend-dec dtend-1-dec)
           range (not (equal dtstart-dec dtend-dec))
           timestamp
           `(timestamp
-            :type ,(if range 'active-range 'active)
-            :year-start ,(nth 5 dtstart-dec)
-            :month-start ,(nth 4 dtstart-dec)
-            :day-start ,(nth 3 dtstart-dec)
-            ,@start-t
-            :year-end ,(nth 5 dtend-dec)
-            :month-end ,(nth 4 dtend-dec)
-            :day-end ,(nth 3 dtend-dec)
-            ,@end-t))                   ; XXX add repeater stuff from
+            (:type ,(if range 'active-range 'active)
+                   :year-start ,(nth 5 dtstart-dec)
+                   :month-start ,(nth 4 dtstart-dec)
+                   :day-start ,(nth 3 dtstart-dec)
+                   ,@start-t
+                   :year-end ,(nth 5 dtend-dec)
+                   :month-end ,(nth 4 dtend-dec)
+                   :day-end ,(nth 3 dtend-dec)
+                   ,@end-t)))           ; XXX add repeater stuff from
                                         ; rrule and rdate
 
-      `(:uid ,uid
-             :timestamp ,timestamp
-             :summary ,summary
-             :description ,description)))
+    `(:uid ,uid
+           :timestamp ,timestamp
+           :summary ,summary
+           :description ,description)))
 
 (defun org-e-caldav-event-to-ical (event)
   "Generate and return the ical equivalent to the event structure
