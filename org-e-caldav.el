@@ -344,20 +344,36 @@ one. Returns the innermost changed org-element structure."
             (org-element-put-property headline :title summary)
           section)))))
 
+(defvar org-e-caldav-normalize-description-restriction
+  '((section paragraph plain-list)
+    (paragraph)
+    (plain-list item)
+    (item paragraph plain-list)))
+
+(defun org-e-caldav-normalize-description (elem)
+  "Constructs a minimal representation of the same object using
+  org-e-caldav-restriction and caches it in the org-e-caldav-
+  normalized-element-cache hash."
+  (let* ((type (car elem))
+         (properties (cadr elem))
+         (contents (cddr elem))
+         (restriction (assoc type org-e-caldav-normalize-description-restriction)))
+    (cons type
+          (cons 
+           properties
+           (loop for c in contents
+                 if (stringp c)
+                 collect (org-e-caldav-strip-text-properties c)
+                 else if (memq (car c) (cdr restriction))
+                 collect (org-e-caldav-normalize-description c))))))
+
 (defun org-e-caldav-extract-description-from-headline (headline timestamp)
   "Return the interpreted first section, where the timestamp has
 been temporarily removed."
   (let* ((section (car (org-element-contents headline)))
-         (timestamp-cons (cl-member timestamp
-                                    (org-element-contents
-                                     (org-element-property :parent timestamp))))
-         description)
-    
-    (setf (car timestamp-cons) ""
-          description (org-element-interpret-data section)
-          (car timestamp-cons) timestamp)
-    
-    description))
+         (normalized-section (org-e-caldav-normalize-description section)))
+        
+    (org-element-interpret-data normalized-section)))
 
 (defun org-e-caldav-strip-text-properties (text)
   "Remove the text properties connected to a string object"
