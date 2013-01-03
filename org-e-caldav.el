@@ -419,39 +419,52 @@ match for which FUN doesn't return nil and return that value."
                (funcall fun parent))
           (org-element-closest parent types fun)))))
 
-(defun org-element-update-buffer (updates)
+(defun org-element-update-buffer (updates local-doc)
   "Updates the current buffer according to the list updates,
 which has the form '( elem1 elem2 elem3 ... ). Nested elements
 are ignored.
 
 Assumes the :begin :end properties of the elems correspond to the
-buffer state.  XXX: overlays have to be treated
-specifically. Refer to org-element-swap-A-B f.ex."
-  (save-excursion
-    (let ((sorted-by-beg (sort (copy-sequence updates)
-                               (lambda (a b) (>= (org-element-property :begin a)
-                                            (org-element-property :begin b)))))
-          (sorted-by-end (sort updates
-                               (lambda (a b) (>= (org-element-property :end a)
-                                            (org-element-property :end b))))))
+buffer state.
 
-      (while sorted-by-end
-        (let* ((elem (car sorted-by-end))
-               (skip (1+ (position elem sorted-by-beg)))
-               (beg (org-element-property :begin elem))
-               (end (org-element-property :end elem)))
-                    
-          (setq sorted-by-end (nthcdr skip sorted-by-end)
-                sorted-by-beg (nthcdr skip sorted-by-beg))
-          
-          (goto-char beg)
-          (delete-region beg end)
-          (insert (org-element-interpret-data elem)))))))
+XXX overlays have to be treated specifically, f.ex. refer to
+org-element-swap-A-B."
+  (save-excursion
+    ;; if the :begin or :end property for any element is missing,
+    ;; replace the whole buffer
+    (if (loop for elem in updates
+              unless (and (numberp (org-element-property :begin elem))
+                          (numberp (org-element-property :end elem)))
+              return t)
+        (progn
+          (delete-region (point-min) (point-max))
+          (insert (org-element-interpret-data local-doc)))
+
+      ;; else it's hopefully faster to replace only the changed parts
+      (let ((sorted-by-beg (sort (copy-sequence updates)
+                                 (lambda (a b) (>= (org-element-property :begin a)
+                                              (org-element-property :begin b)))))
+            (sorted-by-end (sort updates
+                                 (lambda (a b) (>= (org-element-property :end a)
+                                              (org-element-property :end b))))))
+
+        (while sorted-by-end
+          (let* ((elem (car sorted-by-end))
+                 (skip (1+ (position elem sorted-by-beg)))
+                 (beg (org-element-property :begin elem))
+                 (end (org-element-property :end elem)))
+            
+            (setq sorted-by-end (nthcdr skip sorted-by-end)
+                  sorted-by-beg (nthcdr skip sorted-by-beg))
+            
+            (goto-char beg)
+            (delete-region beg end)
+            (insert (org-element-interpret-data elem))))))))
 
 (defun org-e-caldav-find-events (doc)
   "Find a list of events in the current buffer. An event is
 represented by a headline containing an active timestamp."
-  `(:events 
+  `(:events
     ,(mapcar (lambda (ts) (org-e-caldav-headline-to-event
                       (org-element-closest ts 'headline 'identity) ts))
              (org-element-map doc
@@ -638,7 +651,7 @@ where the ev are normal events."
               if (null (car pair))
               do (setcar pair (plist-get (cdr pair) :uid)))
 
-        (org-element-update-buffer local-doc-updates)
+        (org-element-update-buffer local-doc-updates local-doc)
         (mapc (lambda (x) (org-element-put-property (plist-get (cdr x) :timestamp)
                                                :parent nil))
               (plist-get local :events))
