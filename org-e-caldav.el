@@ -102,6 +102,17 @@ entries.")
 
 (defun org-e-caldav-set-state (file eventlist)
   "Update FILE to EVENTLIST in `org-e-caldav-state-alist'."
+
+  (loop for pair in (plist-get eventlist :events)
+        do (org-element-put-property
+            (plist-get (cdr pair) :timestamp)
+            :parent nil)
+        if (null (car pair))
+        do (setcar pair (plist-get (cdr pair) :uid)))
+
+  (setq eventlist
+        (plist-put eventlist :date-state (current-time)))
+
   (let ((cell (assoc file org-e-caldav-state-alist)))
     (if cell
         (setcdr cell eventlist)
@@ -642,15 +653,8 @@ where the ev are normal events."
           (funcall delete-append
                    (plist-get merge :remote-deletes)))
 
-        (loop for pair in (plist-get local :events)
-              if (null (car pair))
-              do (setcar pair (plist-get (cdr pair) :uid)))
-
         (org-element-update-buffer local-doc-updates local-doc)
-        (mapc (lambda (x) (org-element-put-property (plist-get (cdr x) :timestamp)
-                                               :parent nil))
-              (plist-get local :events))
-        (org-e-caldav-set-state file (plist-put local :date-state (current-time)))
+        (org-e-caldav-set-state file local)
         (message "Synchronization of file \"%s\" complete." file)))))
 
 (defun org-e-caldav-sync ()
