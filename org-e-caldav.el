@@ -343,7 +343,7 @@ one. Returns the innermost changed org-element structure."
              (old-timestamp (assoc 'timestamp basket))
              (new-contents (if (equal description old-description)
                                (org-element-contents section)
-                             (nconc basket (list description)))))
+                             (nconc (nreverse basket) (list description)))))
 
         (org-element-put-property timestamp :parent (org-element-property :parent old-timestamp))
         (setcdr old-timestamp (cdr timestamp))
