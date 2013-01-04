@@ -715,12 +715,16 @@ changes."
               (t
                (org-e-caldav-event-to-headline event headline))))
 
-    (if lpair
-        ;; as event was part of remote we need to update the local ones
-        (setcdr lpair event)
+
+    (cond
+     ((plist-get event :delete)
       (plist-put local :events
-                 (cons (cons uid event)
-                       (plist-get local :events))))
+                 (delq lpair (plist-get local :events))))
+     (lpair
+      (setcdr lpair event))
+     (t
+      (plist-put local :events
+                 (cons (cons uid event) (plist-get local :events)))))
     
     uid))
 
