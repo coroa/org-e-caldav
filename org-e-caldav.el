@@ -611,6 +611,25 @@ where the ev are normal events."
                      :conflicts ,conflicts)))
 
 
+
+(defun org-e-caldav-sync-new-remote (inbox-file filter-updated)
+  (with-current-buffer (find-file-noselect inbox-file)
+    (save-excursion
+      (let* ((local-doc (org-element-parse-buffer))
+             local-doc-updates
+             (local-doc-updates-add (lambda (x) (push x local-doc-updates)))
+             (state (org-e-caldav-get-state inbox-file)))
+
+        (loop for uid in (funcall filter-updated (org-e-caldav-fetch-eventlist))
+              as (ruid . ev) = (org-e-caldav-fetch-event x state) do
+              (org-e-caldav-merge-new-remote ev state local-doc-updates-add local-doc 1))
+        
+        (org-element-update-buffer local-doc-updates local-doc)
+        (org-e-caldav-set-state file state)
+
+        (message "Synchronization of file \"%s\" complete." file)))))
+
+
 (defun org-e-caldav-sync-file (file filter-updated updated-add delete-add)
   (with-current-buffer (find-file-noselect file)
     (save-excursion
@@ -670,18 +689,29 @@ where the ev are normal events."
         (delete-add (lambda (x) (push x deleted)))
         conflicts)
     (mapc (lambda (file)
-            (unless (equal file org-e-caldav-inbox)
-              (let ((confs (catch 'conflict
-                             (org-e-caldav-sync-file file filter-updated updated-add delete-add)
-                             nil)))
-                (when confs (push (cons file confs) conflicts)))))
+            (push (cons file
+                        (catch 'conflict (org-e-caldav-sync-file
+                                          file filter-updated updated-add delete-add) nil))
+                  conflicts))
           org-e-caldav-files)
 
-    (org-e-caldav-sync-file org-e-caldav-inbox filter-updated updated-add delete-add)
+    (org-e-caldav-sync-new-remote org-e-caldav-inbox filter-updated)
     (mapc 'org-e-caldav-delete-event (funcall filter-updated deleted))
 
-    ;; (org-e-caldav-show-conflicts conflicts)
+    ;; (org-e-caldav-show-conflicts (delq nil conflicts))
     ))
+
+
+(defun org-e-caldav-merge-new-local (event state local-doc-updates-add inbox level)
+  "Update the local-doc org-element tree to include the new
+remote event."
+  (funcall local-doc-updates-add
+           (org-element-adopt-elements
+            inbox
+            (org-e-caldav-event-to-headline event nil level)))
+
+  (plist-put state :events
+             (cons (cons uid event) (plist-get state :events))))
 
 
 (defun org-e-caldav-merge-remote (pair local-doc-updates)
@@ -706,7 +736,7 @@ where the ev are normal events."
                    (org-e-caldav-event-to-headline event headline)))
       (error "Couldn't upload event %s" uid))))
 
-(defun org-e-caldav-merge-local (event local local-doc-updates-add &optional inbox)
+(defun org-e-caldav-merge-local (event local local-doc-updates-add)
   "Update the local-doc org-element tree to reflect the remote
 changes."
   (let* ((uid (plist-get event :uid))
@@ -715,30 +745,14 @@ changes."
          (headline (plist-get lev :headline)))
     
     (funcall local-doc-updates-add
-             (cond
-              ((plist-get event :delete)
-               (let ((parent (org-element-property :parent lev)))
-                 (when parent
-                   (apply 'org-element-set-contents parent
-                          (delq lev (org-element-get-contents parent))))))
-              ((null lev)
-               (org-element-adopt-elements
-                (car inbox)
-                (org-e-caldav-event-to-headline event nil (cdr inbox))))
-              (t
-               (org-e-caldav-event-to-headline event headline))))
-
-
-    (cond
-     ((plist-get event :delete)
-      (plist-put local :events
-                 (delq lpair (plist-get local :events))))
-     (lpair
-      (setcdr lpair event))
-     (t
-      (plist-put local :events
-                 (cons (cons uid event) (plist-get local :events)))))
-    uid))
+             (if (plist-get event :delete)
+                 (let ((parent (org-element-property :parent lev)))
+                   (plist-put local :events (delq lpair (plist-get local :events)))
+                   (when parent
+                     (apply 'org-element-set-contents parent
+                            (delq lev (org-element-get-contents parent)))))
+               (setcdr lpair event)
+               (org-e-caldav-event-to-headline event headline)))))
 
 
 (defun org-e-caldav-delete-event (uid)
