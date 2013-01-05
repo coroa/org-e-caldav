@@ -744,11 +744,12 @@ changes."
     
     (funcall local-doc-updates-add
              (if (plist-get event :delete)
-                 (let ((parent (org-element-property :parent lev)))
+                 (let ((parent (org-element-property :parent headline)))
                    (plist-put local :events (delq lpair (plist-get local :events)))
                    (when parent
                      (apply 'org-element-set-contents parent
-                            (delq lev (org-element-get-contents parent)))))
+                            (delq headline (org-element-contents parent)))
+                     parent))
                (setcdr lpair event)
                (org-e-caldav-event-to-headline event headline)))))
 
