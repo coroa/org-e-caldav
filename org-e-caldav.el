@@ -273,25 +273,25 @@ event."
                              nil)))
 
 (defun org-e-caldav-fetch-event (uid state)
-  (when uid
-    (let* ((last-update (plist-get state :date-state))
-           (url-request-extra-headers
-            (when last-update
-              `(("If-Modified-Since" . ,(url-get-normalized-date last-update))))))
-      
-      (with-current-buffer (flet ((url-cache-extract (x) nil))
-                             (url-retrieve-synchronously
-                              (concat (org-e-caldav-events-url) (concat uid ".ics"))))
-        (case url-http-response-status
-          (304 (assoc uid (plist-get state :events)))
-          (200 (delete-region
-                (point-min)
-                (progn (goto-char url-http-end-of-headers)
-                       (search-forward "BEGIN:VCALENDAR")
-                       (match-beginning 0)))
-               (cons uid (org-e-caldav-ical-to-event uid)))
-          (404 (cons uid nil))
-          (t   (error "Couldn't retrieve event")))))))
+  (let* ((last-update (plist-get state :date-state))
+         (old-pair (assoc uid (plist-get state :events)))
+         (url-request-extra-headers
+          (when (and last-update old-pair)
+            `(("If-Modified-Since" . ,(url-get-normalized-date last-update))))))
+    
+    (with-current-buffer (flet ((url-cache-extract (x) nil))
+                           (url-retrieve-synchronously
+                            (concat (org-e-caldav-events-url) (concat uid ".ics"))))
+      (case url-http-response-status
+        (304 old-pair)
+        (200 (delete-region
+              (point-min)
+              (progn (goto-char url-http-end-of-headers)
+                     (search-forward "BEGIN:VCALENDAR")
+                     (match-beginning 0)))
+             (cons uid (org-e-caldav-ical-to-event uid)))
+        (404 (cons uid nil))
+        (t   (error "Couldn't retrieve event"))))))
 
 (defun org-e-caldav-fetch-eventlist ()
   "Fetch list of events from remote calendar."
