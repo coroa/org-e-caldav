@@ -182,9 +182,11 @@ which can be fed into `org-e-caldav-insert-org-entry'."
 	 (summary (icalendar--convert-string-for-import
 		   (or (icalendar--get-event-property e 'SUMMARY)
 		       "No Title")))
-	 (description (icalendar--convert-string-for-import
-		       (or (icalendar--get-event-property e 'DESCRIPTION)
-			   "")))
+	 (description
+          (replace-regexp-in-string
+           "\n " "\n" (icalendar--convert-string-for-import
+                       (or (icalendar--get-event-property e 'DESCRIPTION)
+                           "")) t t))
 	 (rrule (icalendar--get-event-property e 'RRULE))
 	 (rdate (icalendar--get-event-property e 'RDATE))
 	 (duration (icalendar--get-event-property e 'DURATION))
