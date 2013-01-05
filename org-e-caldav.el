@@ -190,7 +190,8 @@ which can be fed into `org-e-caldav-insert-org-entry'."
 	 (rrule (icalendar--get-event-property e 'RRULE))
 	 (rdate (icalendar--get-event-property e 'RDATE))
 	 (duration (icalendar--get-event-property e 'DURATION))
-         start-t end-t range timestamp)
+         start-t end-t range repeater timestamp)
+
     (when duration
       (let ((dtend-dec-d (icalendar--add-decoded-times
 			  dtstart-dec
@@ -204,7 +205,7 @@ which can be fed into `org-e-caldav-insert-org-entry'."
 		     summary))
 	(setq dtend-dec dtend-dec-d)
 	(setq dtend-1-dec dtend-1-dec-d)))
-
+    
     (setq start-t
           (unless (and dtstart
                        (string=
@@ -226,6 +227,19 @@ which can be fed into `org-e-caldav-insert-org-entry'."
                         :minute-end ,(nth 1 dtend-dec)))
           dtend-dec (if end-t dtend-dec dtend-1-dec)
           range (not (equal dtstart-dec dtend-dec))
+          repeater
+          (when rrule
+            (let* ((rrule-props (icalendar--split-value rrule))
+                   (frequency   (cadr (assoc 'FREQ rrule-props)))
+                   (interval    (read (or (cadr (assoc 'INTERVAL rrule-props)) "1"))))
+              `(:repeater-type
+                cumulate
+                :repeater-unit
+                ,(cdr (assoc-string frequency
+                                    '(("HOURLY" . hour) ("DAILY" . day) ("WEEKLY" . week)
+                                      ("MONTHLY" . month) ("YEARLY" . year))))
+                :repeater-value
+                ,interval)))
           timestamp
           `(timestamp
             (:type ,(if range 'active-range 'active)
@@ -236,8 +250,8 @@ which can be fed into `org-e-caldav-insert-org-entry'."
                    :year-end ,(nth 5 dtend-dec)
                    :month-end ,(nth 4 dtend-dec)
                    :day-end ,(nth 3 dtend-dec)
-                   ,@end-t)))           ; XXX add repeater stuff from
-                                        ; rrule and rdate
+                   ,@end-t
+                   ,@repeater)))
 
     `(:uid ,uid
            :timestamp ,timestamp
@@ -497,7 +511,9 @@ represented by a headline containing an active timestamp."
                      :year-end
                      :month-end
                      :day-end
-                     :minute-end)       ; XXX add repeater stuff
+                     :minute-end
+                     :repeater-unit
+                     :repeater-value)
         unless (equal (org-element-property key a)
                       (org-element-property key b))
         return t))
