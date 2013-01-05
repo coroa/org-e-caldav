@@ -371,8 +371,9 @@ one. Returns the innermost changed org-element structure."
                                (org-element-contents section)
                              (nconc (nreverse basket) (list description)))))
 
-        (org-element-put-property timestamp :parent (org-element-property :parent old-timestamp))
-        (setcdr old-timestamp (cdr timestamp))
+        (unless (equal timestamp old-timestamp)
+          (org-element-put-property timestamp :parent (org-element-property :parent old-timestamp))
+          (setcdr old-timestamp (cdr timestamp)))
 
         (unless (org-element-property :parent new-drawer)
           (push (org-element-put-property new-drawer :parent section) new-contents))
