@@ -349,7 +349,7 @@ one. Returns the innermost changed org-element structure."
         (timestamp (plist-get event :timestamp)))
 
     (when (plist-get event :sync)
-      (push (sync . (plist-get event :sync)) drawer-alist))
+      (push `(sync . (plist-get event :sync)) drawer-alist))
     
     (if (null headline)
         (if (numberp level)
