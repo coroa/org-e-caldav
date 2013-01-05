@@ -261,9 +261,8 @@ which can be fed into `org-e-caldav-insert-org-entry'."
 (defun org-e-caldav-event-to-ical (event)
   "Generate and return the ical equivalent to the event structure
 event."
-  (let ((description (plist-get event :description)))
-    (while (string-match "\n" description)
-      (setq description (replace-match "\\n" t t description)))
+  (let ((description (replace-regexp-in-string
+                      "\n" "\\n" (plist-get event :description) t t)))
     
     (org-e-icalendar--vevent (plist-get event :headline)
                              (plist-get event :timestamp)
