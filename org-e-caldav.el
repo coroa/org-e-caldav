@@ -590,6 +590,7 @@ where the ev are normal events."
                                                 (format "-%d@%s" (random 10000) system-name))
                               while (memq uid ruidlist)
                               finally return uid))
+              (plist-put lev :uid uid)
               (funcall luidlist-add uid))
 
             ;; if there's a local event with the same uid, we have a
@@ -609,7 +610,8 @@ where the ev are normal events."
              ((null lev)
               (funcall delete-add uid))
              (t
-              (push (cons uid lev) rups)))
+              (push lev rups)
+              (push lev lups)))
             
             ;; mark it
             (puthash uid t added)))
@@ -659,16 +661,18 @@ where the ev are normal events."
         ;;    \          /    \          /
         ;;    parse    load   load     fetch
         ;;      \      /        \      /
-        ;;     local-diff       remote-diff
+        ;;     local-diff      remote-diff
         ;;             \        /
         ;;              \      /
-        ;;             merged-diff --------send-------->
-        ;;                                              (...)
-        ;;               local   <--recv-updated-diff---
+        ;;               merge
+        ;;              /     \
+        ;;             /       \
+        ;;     merge-local  merge-remote  --> push changes to caldav
+        ;;             \       /
+        ;;              \     /
+        ;;               local
         ;;                 v
-        ;;              merged
-        ;;                 v
-        ;;        new state/local/remote
+        ;;             new state
 
         (let* ((state (org-e-caldav-get-state file))
                (luidlist (delq nil (mapcar (lambda (x) (car x)) (plist-get local :events))))
@@ -684,8 +688,7 @@ where the ev are normal events."
           (funcall updated-append luidlist) 
           (if conflicts (throw 'conflict conflicts))
 
-          (mapc (lambda (x) (org-e-caldav-merge-remote x local-doc-updates-add))
-                (plist-get merge :remote-updates))
+          (mapc  'org-e-caldav-merge-remote (plist-get merge :remote-updates))
           (mapc (lambda (x) (org-e-caldav-merge-local x local local-doc-updates-add))
                 (plist-get merge :local-updates)))
 
@@ -730,26 +733,17 @@ remote event."
              (cons (cons uid event) (plist-get state :events))))
 
 
-(defun org-e-caldav-merge-remote (pair local-doc-updates-add)
+(defun org-e-caldav-merge-remote (event)
   "Write a local change to a remote resource."
-  (let* ((uid (car pair))
-         (event (cdr pair))
-         (headline (plist-get event :headline))
-         (luid (plist-get event :uid)))
-    
-    (when (null luid)
-      (plist-put event :uid uid))
-    
-    (if (url-dav-save-resource
-         (concat (org-e-caldav-events-url) uid ".ics")
-         (encode-coding-string
-          (concat "BEGIN:VCALENDAR\n"
-                  (org-e-caldav-event-to-ical event)
-                  "END:VCALENDAR\n") 'utf-8-dos) "text/calendar; charset=UTF-8")
-
-        (when (null luid)
-          (funcall local-doc-updates-add
-                   (org-e-caldav-event-to-headline event headline)))
+  (let* ((uid (plist-get event :uid))
+         (headline (plist-get event :headline)))
+        
+    (unless (url-dav-save-resource
+             (concat (org-e-caldav-events-url) uid ".ics")
+             (encode-coding-string
+              (concat "BEGIN:VCALENDAR\n"
+                      (org-e-caldav-event-to-ical event)
+                      "END:VCALENDAR\n") 'utf-8-dos) "text/calendar; charset=UTF-8")
       (error "Couldn't upload event %s" uid))))
 
 (defun org-e-caldav-merge-local (event local local-doc-updates-add)
@@ -758,7 +752,8 @@ changes."
   (let* ((uid (plist-get event :uid))
          (lpair (assoc uid (plist-get local :events)))
          (lev (cdr lpair))
-         (headline (plist-get lev :headline)))
+         (headline (or (plist-get lev :headline)
+                       (plist-get event :headline))))
     
     (funcall local-doc-updates-add
              (if (plist-get event :delete)
@@ -768,7 +763,9 @@ changes."
                      (apply 'org-element-set-contents parent
                             (delq headline (org-element-contents parent)))
                      parent))
-               (setcdr lpair event)
+               
+               (when lpair
+                 (setcdr lpair event))
                (org-e-caldav-event-to-headline event headline)))))
 
 
