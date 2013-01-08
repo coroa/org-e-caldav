@@ -416,10 +416,35 @@ one. Returns the innermost changed org-element structure."
    (org-e-caldav-normalize-description section basket-add)))
 
 (defun org-e-caldav-strip-text-properties (text)
-  "Remove the text properties connected to a string object"
+  "Remove the text properties connected to a string object."
   (let ((ret (copy-sequence text)))
     (set-text-properties 0 (length ret) nil ret)
     ret))
+
+(defun org-e-caldav-element-copy (element parent)
+  "Return a deep copy of an org-element element."
+  (cond
+   ((stringp element)
+    (let ((ret (copy-sequence element)))
+      (put-text-property 0 (length ret) :parent parent ret)
+      ret))
+   ((and (consp element)
+         (symbolp (car element)))
+    (let* ((type (car element))
+           (props (copy-sequence (cadr element)))
+           (ret (list type props)))
+      (plist-put props :parent parent)
+      (when (eq type 'headline)
+        (plist-put props :title
+                   (mapcar (lambda (child) (org-e-caldav-element-copy child ret))
+                           (plist-get props :title))))
+      (setf (cddr ret)
+            (mapcar (lambda (child) (org-e-caldav-element-copy child ret))
+                    (cddr element)))
+      ret))
+   (t
+    (error (concat "copy-element shouldn't be called on sequences,"
+                   "which are no org-element elements")))))
 
 (defun org-e-caldav-headline-to-event (headline timestamp)
   "Return event structure for a headline. An additional
@@ -646,7 +671,7 @@ where the ev are normal events."
         (message "Synchronization of file \"%s\" complete." inbox-file)))))
 
 
-(defun org-e-caldav-sync-file (file filter-updated updated-append delete-add)
+(defun org-e-caldav-sync-file (file updated-append delete-add)
   (with-current-buffer (find-file-noselect file)
     (save-excursion
       (let* ((local-doc (org-element-parse-buffer))
@@ -682,37 +707,37 @@ where the ev are normal events."
                   ,(mapcar (lambda (x) (org-e-caldav-fetch-event x state)) luidlist)))
                (local-diff (org-e-caldav-eventlist-diff state local))
                (remote-diff (org-e-caldav-eventlist-diff state remote))
-               (merge (org-e-caldav-prepare-merge local-diff remote-diff luidlist-add delete-add))
-               (conflicts (plist-get merge :conflicts)))
-
-          (funcall updated-append luidlist) 
-          (if conflicts (throw 'conflict conflicts))
+               (merge (org-e-caldav-prepare-merge local-diff remote-diff
+                                                  luidlist-add delete-add)))
 
           (mapc  'org-e-caldav-merge-remote (plist-get merge :remote-updates))
           (mapc (lambda (x) (org-e-caldav-merge-local x local local-doc-updates-add))
-                (plist-get merge :local-updates)))
+                (plist-get merge :local-updates))
 
+          (mapc (lambda (x) (org-e-caldav-merge-conflict x local-doc-updates-add))
+                (plist-get merge :conflicts)))
+        
         (org-element-update-buffer local-doc-updates local-doc)
         (org-e-caldav-set-state file local)
-        (message "Synchronization of file \"%s\" complete." file)))))
+        (message "Synchronization of file \"%s\" complete." file)
+        
+        (funcall updated-append luidlist)
+        (plist-get merge :conflicts)))))
 
 (defun org-e-caldav-sync ()
   (interactive)
-  (let ((files (cons org-e-caldav-inbox org-e-caldav-files))
+  (let ((files (adjoin org-e-caldav-inbox org-e-caldav-files))
         (updated (make-hash-table :test 'equal))
         (updated-append (lambda (x) (mapc (lambda (y) (puthash y t updated)) x)))
-        (filter-updated (lambda (x) (delq nil (mapcar (lambda (y) (unless (gethash y updated) y)) x))))
+        (filter-updated (lambda (x) (loop for y in x unless (gethash y updated) collect y)))
         deleted
         (delete-add (lambda (x) (push x deleted)))
-        conflicts)
-
-    (delete-dups files)
-    (mapc (lambda (file)
-            (push (cons file
-                        (catch 'conflict (org-e-caldav-sync-file
-                                          file filter-updated updated-append delete-add) nil))
-                  conflicts))
-          files)
+        (conflicts
+         (mapcar (lambda (file)
+                   (cons file
+                         (org-e-caldav-sync-file
+                          file updated-append delete-add)))
+                 files)))
 
     (mapc 'org-e-caldav-delete-event (funcall filter-updated deleted))
     (org-e-caldav-sync-new-remotes org-e-caldav-inbox filter-updated)
@@ -730,7 +755,7 @@ remote event."
             (org-e-caldav-event-to-headline event nil level)))
 
   (plist-put state :events
-             (cons (cons uid event) (plist-get state :events))))
+             (acons uid event (plist-get state :events))))
 
 
 (defun org-e-caldav-merge-remote (event)
@@ -768,6 +793,28 @@ changes."
                  (setcdr lpair event))
                (org-e-caldav-event-to-headline event headline)))))
 
+
+(defun org-e-caldav-merge-conflict (conflict local-doc-updates-add)
+  "For a conflict, add the two conflicting headlines next to each
+other to the org-element tree."
+  (let* ((lev (car conflict))
+         (rev (cdr conflict))
+         (lheadline (plist-get lev :headline))
+         (parent (org-element-property :parent lheadline))
+         (lheadlinec (memq lheadline
+                           (org-element-contents parent)))
+         (rheadline (org-e-caldav-element-copy lheadline parent)))
+
+    (funcall local-doc-updates-add
+             (org-e-caldav-event-to-headline lev lheadline))
+    
+    ;; insert rheadline in linked list after lheadline
+    (setcdr lheadlinec (cons rheadline (cdr lheadlinec)))
+
+    (org-element-put-property rheadline :begin
+                              (org-element-property :end rheadline))
+    (funcall local-doc-updates-add
+             (org-e-caldav-event-to-headline rev rheadline))))
 
 (defun org-e-caldav-delete-event (uid)
   "Delete event with UID from calendar."
