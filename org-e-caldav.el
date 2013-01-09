@@ -142,6 +142,31 @@ entries.")
   "Load org-e-caldav state from `org-e-caldav-state-file'."
   (load org-e-caldav-state-file 'noerror nil))
 
+(defvar org-e-caldav-conflicts-buffer "*Org-e-caldav conflicts*"
+  "Name of the conflict buffer")
+
+(defun org-e-caldav-show-conflicts (conflicts)
+  "Show conflicts CONFLICTS, which looks like
+   ((file1 lev1 . rev1) (file2 lev2 . rev2) ..)
+   in conflict window."
+  (when conflicts
+    (let ((buf (get-buffer-create org-e-caldav-conflicts-buffer)))
+      (with-help-window buf
+        (with-current-buffer buf
+          (erase-buffer)
+          (org-mode)
+          (insert "There were some conflicts while merging.  Here
+are links to the problematic items. Edit the files to contain,
+what you want to keep and sync again. The :sync property tells
+you their origin.\n\n")
+          
+          (loop for (file . cfs) in conflicts do
+                (loop for (lev . rev) in cfs do
+                      (insert (format "- %s (in [[file:%s::*%s][%s]])\n"
+                                      (plist-get lev :summary) file
+                                      (plist-get lev :summary) file)
+                              "\n"))))))))
+
 ;;; A few functions from org-caldav.el by David Engster
 
 (defun org-e-caldav-events-url ()
@@ -760,8 +785,7 @@ where the ev are normal events."
     (mapc 'org-e-caldav-delete-event (funcall filter-updated deleted))
     (org-e-caldav-sync-new-remotes org-e-caldav-inbox filter-updated)
 
-    ;; (org-e-caldav-show-conflicts (delq nil conflicts))
-    ))
+    (org-e-caldav-show-conflicts conflicts)))
 
 
 (defun org-e-caldav-merge-new-local (event state local-doc-updates-add inbox level)
