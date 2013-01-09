@@ -100,9 +100,17 @@ entries.")
 
 (defvar org-e-caldav-state-alist nil)
 
-(defun org-e-caldav-set-state (file eventlist)
+(defun org-e-caldav-set-state (file eventlist &optional state uidsreset)
   "Update FILE to EVENTLIST in `org-e-caldav-state-alist'."
-
+  (mapc (lambda (uid)
+          (let ((lpair (assoc uid (plist-get eventlist :events)))
+                (spair (assoc uid (plist-get state :events))))
+            (if spair
+                (setcdr lpair (cdr spair))
+              (plist-put eventlist :events
+                         (delq lpair (plist-get eventlist :events))))))
+        uidsreset)
+  
   (loop for pair in (plist-get eventlist :events)
         as (uid . event) = pair
         do
@@ -585,7 +593,7 @@ The form of the alist is ((:property . (valueA valueB)...)"
 (defun org-e-caldav-eventlist-dups (eventlist)
   "Return non-nil if EVENTLIST contains events with the same UID.
 The value returned is a list of duplicated ids."
-  (let ((hash (make-hash-table))
+  (let ((hash (make-hash-table :test 'equal))
         (dups))
     (mapc (lambda (x)
             (let ((uid (car x)))
@@ -695,9 +703,9 @@ where the ev are normal events."
         ;;              \      /
         ;;               merge
         ;;              /     \
-        ;;             /       \
-        ;;     merge-local  merge-remote  --> push changes to caldav
-        ;;             \       /
+        ;;             /    merge-remote  --> push changes to caldav  
+        ;;            |        |
+        ;;      merge-local ------- - - - --> update local org-element tree
         ;;              \     /
         ;;               local
         ;;                 v
@@ -706,6 +714,7 @@ where the ev are normal events."
         (let* ((state (org-e-caldav-get-state file))
                (luidlist (delq nil (mapcar (lambda (x) (car x)) (plist-get local :events))))
                (luidlist-add (lambda (x) (push x luidlist)))
+               uidsreset (uidsreset-add (lambda (x) (push x uidsreset)))
                (remote
                 `(:events
                   ,(mapcar (lambda (x) (org-e-caldav-fetch-event x state)) luidlist)))
@@ -714,34 +723,37 @@ where the ev are normal events."
                (merge (org-e-caldav-prepare-merge local-diff remote-diff
                                                   luidlist-add delete-add)))
 
-          (mapc  'org-e-caldav-merge-remote (plist-get merge :remote-updates))
-          (mapc (lambda (x) (org-e-caldav-merge-local x local local-doc-updates-add))
+          (mapc  (lambda (x) (org-e-caldav-merge-remote x uidsreset-add))
+                 (plist-get merge :remote-updates))
+          (mapc (lambda (x) (unless (memq (plist-get x :uid) uidsreset)
+                         (org-e-caldav-merge-local x local local-doc-updates-add)))
                 (plist-get merge :local-updates))
 
-          (mapc (lambda (x) (org-e-caldav-merge-conflict x local-doc-updates-add))
-                (plist-get merge :conflicts)))
-        
-        (org-element-update-buffer local-doc-updates local-doc)
-        (org-e-caldav-set-state file local)
-        (message "Synchronization of file \"%s\" complete." file)
-        
-        (funcall updated-append luidlist)
-        (plist-get merge :conflicts)))))
+          (mapc (lambda (x) (org-e-caldav-merge-conflict x uidsreset-add local-doc-updates-add))
+                (plist-get merge :conflicts))
+
+          (org-element-update-buffer local-doc-updates local-doc)
+
+          (org-e-caldav-set-state file local state uidsreset)
+          (message "Synchronization of file \"%s\" complete." file)
+
+          (funcall updated-append luidlist)
+          (plist-get merge :conflicts))))))
 
 (defun org-e-caldav-sync ()
   (interactive)
-  (let ((files (adjoin org-e-caldav-inbox org-e-caldav-files))
-        (updated (make-hash-table :test 'equal))
-        (updated-append (lambda (x) (mapc (lambda (y) (puthash y t updated)) x)))
-        (filter-updated (lambda (x) (loop for y in x unless (gethash y updated) collect y)))
-        deleted
-        (delete-add (lambda (x) (push x deleted)))
-        (conflicts
-         (mapcar (lambda (file)
-                   (cons file
-                         (org-e-caldav-sync-file
-                          file updated-append delete-add)))
-                 files)))
+  (let* ((files (adjoin org-e-caldav-inbox org-e-caldav-files))
+         (updated (make-hash-table :test 'equal))
+         (updated-append (lambda (x) (mapc (lambda (y) (puthash y t updated)) x)))
+         (filter-updated (lambda (x) (loop for y in x unless (gethash y updated) collect y)))
+         deleted
+         (delete-add (lambda (x) (push x deleted)))
+         (conflicts
+          (delq nil (mapcar (lambda (file)
+                              (let ((cfs (org-e-caldav-sync-file
+                                          file updated-append delete-add)))
+                                (when cfs (cons file cfs))))
+                            files))))
 
     (mapc 'org-e-caldav-delete-event (funcall filter-updated deleted))
     (org-e-caldav-sync-new-remotes org-e-caldav-inbox filter-updated)
@@ -762,7 +774,7 @@ remote event."
              (acons uid event (plist-get state :events))))
 
 
-(defun org-e-caldav-merge-remote (event)
+(defun org-e-caldav-merge-remote (event uidsreset-add)
   "Write a local change to a remote resource."
   (let* ((uid (plist-get event :uid))
          (headline (plist-get event :headline)))
@@ -773,7 +785,8 @@ remote event."
               (concat "BEGIN:VCALENDAR\n"
                       (org-e-caldav-event-to-ical event)
                       "END:VCALENDAR\n") 'utf-8-dos) "text/calendar; charset=UTF-8")
-      (error "Couldn't upload event %s" uid))))
+      (funcall uidsreset-add uid)
+      (warn "Couldn't upload event %s. Server problems?" uid))))
 
 (defun org-e-caldav-merge-local (event local local-doc-updates-add)
   "Update the local-doc org-element tree to reflect the remote
@@ -798,7 +811,7 @@ changes."
                (org-e-caldav-event-to-headline event headline)))))
 
 
-(defun org-e-caldav-merge-conflict (conflict local-doc-updates-add)
+(defun org-e-caldav-merge-conflict (conflict uidsreset-add local-doc-updates-add)
   "For a conflict, add the two conflicting headlines next to each
 other to the org-element tree."
   (let* ((lev (car conflict))
@@ -808,17 +821,19 @@ other to the org-element tree."
          (lheadlinec (memq lheadline
                            (org-element-contents parent)))
          (rheadline (org-e-caldav-element-copy lheadline parent)))
-
-    (funcall local-doc-updates-add
-             (org-e-caldav-event-to-headline lev lheadline))
     
     ;; insert rheadline in linked list after lheadline
     (setcdr lheadlinec (cons rheadline (cdr lheadlinec)))
 
-    (org-element-put-property rheadline :begin
-                              (org-element-property :end rheadline))
+    (org-e-caldav-event-to-headline rev rheadline)
     (funcall local-doc-updates-add
-             (org-e-caldav-event-to-headline rev rheadline))))
+             (org-element-put-property rheadline :begin
+                                       (org-element-property :end rheadline)))
+    
+    (funcall local-doc-updates-add
+             (org-e-caldav-event-to-headline lev lheadline))
+
+    (funcall uidsreset-add (plist-get lev :uid))))
 
 (defun org-e-caldav-delete-event (uid)
   "Delete event with UID from calendar."
