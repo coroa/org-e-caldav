@@ -273,14 +273,16 @@ which can be fed into `org-e-caldav-insert-org-entry'."
 event."
   (let ((description (replace-regexp-in-string
                       "\n" "\\n" (plist-get event :description) t t)))
-    
-    (org-e-icalendar--vevent (plist-get event :headline)
-                             (plist-get event :timestamp)
-                             (plist-get event :uid)
-                             (plist-get event :summary)
-                             nil
-                             description
-                             nil)))
+
+    (concat "BEGIN:VCALENDAR\n"
+            (org-e-icalendar--vevent (plist-get event :headline)
+                                     (plist-get event :timestamp)
+                                     (plist-get event :uid)
+                                     (plist-get event :summary)
+                                     nil
+                                     description
+                                     nil)
+            "END:VCALENDAR\n")))
 
 (defun org-e-caldav-fetch-event (uid state)
   (let* ((last-update (plist-get state :date-state))
@@ -782,9 +784,8 @@ remote event."
     (unless (url-dav-save-resource
              (concat (org-e-caldav-events-url) uid ".ics")
              (encode-coding-string
-              (concat "BEGIN:VCALENDAR\n"
-                      (org-e-caldav-event-to-ical event)
-                      "END:VCALENDAR\n") 'utf-8-dos) "text/calendar; charset=UTF-8")
+              (org-e-caldav-event-to-ical event)
+              'utf-8-dos) "text/calendar; charset=UTF-8")
       (funcall uidsreset-add uid)
       (warn "Couldn't upload event %s. Server problems?" uid))))
 
