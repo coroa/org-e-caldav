@@ -104,11 +104,13 @@ entries.")
   "Update FILE to EVENTLIST in `org-e-caldav-state-alist'."
 
   (loop for pair in (plist-get eventlist :events)
-        do (org-element-put-property
-            (plist-get (cdr pair) :timestamp)
-            :parent nil)
-        if (null (car pair))
-        do (setcar pair (plist-get (cdr pair) :uid)))
+        as (uid . event) = pair
+        do
+        (org-element-put-property (plist-get event :timestamp)
+                                  :parent nil)
+        (plist-put event :headline nil)
+        unless uid
+        do (setcar pair (plist-get event :uid)))
 
   (setq eventlist
         (plist-put eventlist :date-state (current-time)))
@@ -328,29 +330,30 @@ update the first found property drawer underneath."
                           alist))
     (let* ((drawer (org-e-caldav-find-property-drawer elem))
            (added (make-hash-table)))
-      (org-element-map drawer
-                       'node-property
-                       (lambda (x) (let ((y (assoc (org-element-property :key x) alist)))
-                                (when y
-                                  (org-element-put-property x :value (cdr y))
-                                  (puthash (car y) t added)))))
+      (apply 'org-element-set-contents drawer
+             (loop for elem in (cddr drawer)
+                   as x = (assoc (org-element-property :key elem) alist)
+                   if (null x)
+                   collect elem
+                   else if (cdr x) do
+                   (org-element-put-property elem :value (cdr x))
+                   (puthash (car x) t added)
+                   and collect elem))
 
       (apply 'org-element-adopt-elements drawer
              (loop for (key . val) in alist
-                   unless (gethash key added)
+                   unless (or (null val) (gethash key added))
                    collect `(node-property (:key ,key :value ,val)))))))
 
 (defun org-e-caldav-event-to-headline (event &optional headline level)
   "Create a new org-element headline or update an existing
 one. Returns the innermost changed org-element structure."
-  (let ((drawer-alist `((,org-e-caldav-uid-property . ,(plist-get event :uid))))
+  (let ((drawer-alist `((,org-e-caldav-uid-property . ,(plist-get event :uid))
+                        ("sync" . ,(plist-get event :sync))))
         (summary (plist-get event :summary))
         (description (plist-get event :description))
         (timestamp (plist-get event :timestamp)))
 
-    (when (plist-get event :sync)
-      (push `(sync . (plist-get event :sync)) drawer-alist))
-    
     (if (null headline)
         (if (numberp level)
             `(headline (:title ,summary :level ,level)
@@ -635,6 +638,7 @@ where the ev are normal events."
              ((null lev)
               (funcall delete-add uid))
              (t
+              (plist-put lev :sync nil)
               (push lev rups)
               (push lev lups)))
             
