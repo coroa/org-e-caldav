@@ -1,8 +1,19 @@
-* ❢ newlines are sometimes lost or added on a remote change of the events description or timestamps
+#+TODO: TODO | DONE
+
+* TODO local deletions don't check for conflicts
+if between two syncs the local event is deleted and the remote one
+updated conflict detection doesn't trigger and the remote event is
+deleted.
+
+the problem is that it could have been a refile as well, which means
+all the deletion, conflict decision, can only be done in a last step,
+which would need to know the previous state as well.
+
+* TODO newlines are sometimes lost or added on a remote change of the events description or timestamps
 probably due to ignored :post-blank, :pre-blank properties in the
 reconstructed headline.
 
-* ❢ org-element-timestamp-interpreter forgets the repeater information of range timestamps
+* TODO org-element-timestamp-interpreter forgets the repeater information of range timestamps
 http://thread.gmane.org/gmane.emacs.orgmode/64489
 
 this means that remote changes to a range timestamp with repeating
@@ -17,26 +28,28 @@ Date:   Thu Jan 10 13:57:37 2013 +0100
 
 org-element: Correctly interpret timestamps ranges with repeaters
 
-** ❢ Add info about minimal needed version somewhere?
+** TODO Add info about minimal needed version somewhere?
 
-* ❢ repeater-type is not synced (is there an ical equivalent?) and might be lost locally
+* TODO repeater-type is not synced (is there an ical equivalent?) and might be lost locally
 when parsing the ical repeater info into an org-element timestamp
 the :repeater-type is assumed to be cummulate (those with one +).
 
 other types will probably be overwritten when there is a remote
 change.
 
-* ❢ a "sync" property is used internally to handle merge conflicts and thus removed on sync
-has to be renamed to something configurable with default of perhaps
-CALDAVSYNC.
+** DONE ugly work around
+if old-timestamp has :repeater-type and new-timestamp
+has :repeater-type
 
-* ❢ from multiple timestamps on the same headline only the first one is used
+set :repeater-type of new-timestamp to the one of the old one
+
+* TODO from multiple timestamps on the same headline only the first one is used
 the others are preserved but ignored.
 
 has ical a possibility for more than one time per event or would we
 need to add multiple events? how would we store the different UIDS?
 
-* ❢ connection drops during a sync aren't handled gracefully
+* TODO connection drops during a sync aren't handled gracefully
 
 any return code from the caldav server upon retrieval of an
 event which is not in (304 200 404) will be answered with
@@ -53,4 +66,4 @@ only 2 bad things can happen:
    run and you might have to resolve a bunch of conflicts)
 
 ** during adding new remote events locally
-nothing happens, literally
+nothing happens
