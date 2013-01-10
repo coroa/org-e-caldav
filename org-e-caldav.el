@@ -100,16 +100,21 @@ entries.")
 
 (defvar org-e-caldav-state-alist nil)
 
-(defun org-e-caldav-set-state (file eventlist &optional state uidsreset)
-  "Update FILE to EVENTLIST in `org-e-caldav-state-alist'."
-  (mapc (lambda (uid)
-          (let ((lpair (assoc uid (plist-get eventlist :events)))
-                (spair (assoc uid (plist-get state :events))))
-            (if spair
-                (setcdr lpair (cdr spair))
-              (plist-put eventlist :events
-                         (delq lpair (plist-get eventlist :events))))))
-        uidsreset)
+(defun org-e-caldav-set-state (file eventlist &optional uidsreset)
+  "Update FILE to EVENTLIST in `org-e-caldav-state-alist'. Events
+with uids in UIDSRESET will be reset to the previous saved
+state. Further is the :headline element removed from all events
+and the :parent property of the timestamp element."
+  (when uidsreset
+    (let ((state (cdr (assoc file org-e-caldav-state-alist))))
+      (mapc (lambda (uid)
+              (let ((lpair (assoc uid (plist-get eventlist :events)))
+                    (spair (assoc uid (plist-get state :events))))
+                (if spair
+                    (setcdr lpair (cdr spair))
+                  (plist-put eventlist :events
+                             (delq lpair (plist-get eventlist :events))))))
+            uidsreset)))
   
   (loop for pair in (plist-get eventlist :events)
         as (uid . event) = pair
@@ -761,7 +766,7 @@ where the ev are normal events."
 
           (org-element-update-buffer local-doc-updates local-doc)
 
-          (org-e-caldav-set-state file local state uidsreset)
+          (org-e-caldav-set-state file local uidsreset)
           (message "Synchronization of file \"%s\" complete." file)
 
           (funcall updated-append luidlist)
