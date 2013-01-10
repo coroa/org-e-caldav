@@ -1,0 +1,37 @@
+* ❢ newlines are sometimes lost or added on a remote change of the events description or timestamps
+probably due to ignored :post-blank, :pre-blank properties in the
+reconstructed headline.
+
+* ❢ org-element-timestamp-interpreter forgets the repeater information of range timestamps
+http://thread.gmane.org/gmane.emacs.orgmode/64489
+
+this means that remote changes to a range timestamp with repeating
+info, f.ex. <2013-01-10 Thu 20:00 +1d>--<2013-01-10 Thu 20:15 +1d>,
+will put <2013-01-10 Thu 20:00>--<2013-01-10 Thu 20:15> in the org
+file and push that change to the caldav server on the next sync.
+
+** Fixed in org-mode master
+commit b68103a34430819b16c74a54f9bb62978b209748
+Author: Nicolas Goaziou <n.goaziou@gmail.com>
+Date:   Thu Jan 10 13:57:37 2013 +0100
+
+org-element: Correctly interpret timestamps ranges with repeaters
+
+** ❢ Add info about minimal release somewhere?
+
+* ❢ repeater-type is not synced (is there an ical equivalent?) and might be lost locally
+when parsing the ical repeater info into an org-element timestamp
+the :repeater-type is assumed to be cummulate (those with one +).
+
+other types will probably be overwritten when there is a remote
+change.
+
+* ❢ a "sync" property is used internally to handle merge conflicts and thus removed on sync
+has to be renamed to something configurable with default of perhaps
+CALDAVSYNC.
+
+* ❢ from multiple timestamps on the same headline only the first one is used
+the others are preserved but ignored.
+
+has ical a possibility for more than one time per event or would we
+need to add multiple events? how would we store the different UIDS?
