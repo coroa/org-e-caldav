@@ -145,8 +145,8 @@ and the :parent property of the timestamp element."
 ;;; A few functions from org-caldav.el by David Engster
 
 (defun org-e-caldav-check-connection ()
-  "Check connection by doing a PROPFIND on CalDAV URL."
-  (org-e-caldav-debug-print (format "Check connection - doing a PROPFIND on %s."
+  "Checking connection by doing a PROPFIND on CalDAV URL."
+  (org-e-caldav-debug-print (format "Checking connection - doing a PROPFIND on %s."
 				  org-e-caldav-url))
   (let ((output (url-dav-request org-e-caldav-url "PROPFIND" nil nil 1)))
   (unless (eq (plist-get (cdar output) 'DAV:status) 200)
@@ -409,8 +409,10 @@ one. Returns the innermost changed org-element structure."
 
 (defun org-e-caldav-normalize-description (elem &optional basket-add)
   "Constructs a minimal representation of the same object using
-  org-e-caldav-restriction and caches it in the org-e-caldav-
-  normalized-element-cache hash."
+org-e-caldav-restriction and caches it in the org-e-caldav-
+normalized-element-cache hash. Elements, which don't satisfy the
+restrictions defined in o-e-c-normalize-description-restriction,
+are skipped and collected via basket-add."
   (let* ((type (car elem))
          (properties (cadr elem))
          (contents (cddr elem))
@@ -427,7 +429,7 @@ one. Returns the innermost changed org-element structure."
                  do (funcall basket-add c))))))
 
 (defun org-e-caldav-extract-description-from-section (section &optional basket-add)
-  "Return the interpreted first section."
+  "Return the interpreted section after normalizing it."
   (org-element-interpret-data
    (org-e-caldav-normalize-description section basket-add)))
 
@@ -673,7 +675,7 @@ The value returned is a list of duplicated ids."
   (let* ((uid (plist-get event :uid))
          (headline (plist-get event :headline)))
 
-    (org-e-caldav-debug-print (format "Putting event \"%s\" UID %s.\n"
+    (org-e-caldav-debug-print (format "Putting event \"%s\" UID %s."
                                       (plist-get event :summary) uid))
     (unless (url-dav-save-resource
              (concat org-e-caldav-url uid ".ics")
@@ -691,18 +693,19 @@ changes."
          (lev (cdr lpair))
          (headline (or (plist-get lev :headline)
                        (plist-get event :headline))))
-
+e
     (funcall local-doc-updates-add
              (if (plist-get event :delete)
                  (let ((parent (org-element-property :parent headline)))
-                   (org-e-caldav-debug-print (format "Deleting local headline \"%s\" with UID %s.\n"
+                   (org-e-caldav-debug-print (format "Deleting local headline \"%s\" with UID %s."
                                                      (plist-get lev :summary) uid))    
                    (plist-put local :events (delq lpair (plist-get local :events)))
                    (when parent
                      (apply 'org-element-set-contents parent
                             (delq headline (org-element-contents parent)))
                      parent))
-               (org-e-caldav-debug-print (format "Updating local headline \"%s\" with UID %s.\n"
+               
+               (org-e-caldav-debug-print (format "Updating local headline \"%s\" with UID %s."
                                                  (plist-get event :summary) uid))
                (when lpair
                  (setcdr lpair event))
@@ -721,7 +724,7 @@ other to the org-element tree."
          (rheadline (org-e-caldav-element-copy lheadline parent)))
 
     (org-e-caldav-debug-print
-     (format "Adding conflicting remote headline \"%s\" with UID %s.\n"
+     (format "Adding conflicting remote headline \"%s\" with UID %s."
              (plist-get lev :summary) (plist-get lev :uid)))
     
     ;; insert rheadline in linked list after lheadline
@@ -738,7 +741,7 @@ other to the org-element tree."
     (funcall uidsreset-add (plist-get lev :uid))))
 
 (defun org-e-caldav-sync-file (file updated-append delete-add)
-  (org-e-caldav-debug-print "Starting syncing FILE %s.\n" file)
+  (org-e-caldav-debug-print (format "Starting syncing FILE %s." file))
   (with-current-buffer (find-file-noselect file)
     (save-excursion
       (let* ((local-doc (org-element-parse-buffer))
@@ -798,6 +801,9 @@ other to the org-element tree."
 (defun org-e-caldav-merge-new-local (event state local-doc-updates-add inbox level)
   "Update the local-doc org-element tree to include the new
 remote event."
+  (org-e-caldav-debug-print (format "Adding new remote event \"%s\" with UID %s to the inbox."
+                                    (plist-get event :summary) (plist-get event :uid)))
+  
   (funcall local-doc-updates-add
            (org-element-adopt-elements
             inbox
@@ -807,6 +813,7 @@ remote event."
              (acons uid event (plist-get state :events))))
 
 (defun org-e-caldav-sync-new-remotes (inbox-file filter-updated)
+  (org-e-caldav-debug-print "Looking for new remote events to add to inbox.")
   (with-current-buffer (find-file-noselect inbox-file)
     (save-excursion
       (let* ((local-doc (org-element-parse-buffer))
@@ -826,7 +833,7 @@ remote event."
 
 (defun org-e-caldav-delete-event (uid)
   "Delete event with UID from calendar."
-  (org-e-caldav-debug-print (format "Deleting event UID %s.\n" uid))
+  (org-e-caldav-debug-print (format "Deleting event UID %s." uid))
   (url-dav-delete-file (concat org-e-caldav-url uid ".ics")))
 
 (defun org-e-caldav-show-conflicts (conflicts)
@@ -853,7 +860,7 @@ you their origin.\n\n")
 
 (defun org-e-caldav-sync ()
   (interactive)
-  (org-e-caldav-debug-print "Starting sync.\n")
+  (org-e-caldav-debug-print "Starting sync.")
   (org-e-caldav-check-connection)
   (org-e-caldav-load-state)
   (let* ((files (adjoin org-e-caldav-inbox org-e-caldav-files))
