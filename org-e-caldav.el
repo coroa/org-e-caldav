@@ -98,7 +98,7 @@ with uids in UIDSRESET will be reset to the previous saved
 state. Further is the :headline element removed from all events
 and the :parent property of the timestamp element."
   (when uidsreset
-    (let ((state (cdr (assoc file org-e-caldav-state-alist))))
+    (let ((state (org-e-caldav-get-state file)))
       (mapc (lambda (uid)
               (let ((lpair (assoc uid (plist-get eventlist :events)))
                     (spair (assoc uid (plist-get state :events))))
