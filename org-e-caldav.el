@@ -562,7 +562,7 @@ The form of the alist is ((:property . (valueA valueB)...)"
                  if uid collect uid))))
     (delete-dups uid-list)
 
-    (append
+    (nconc
      (loop for uid in uid-list
            as aev = (cdr (assoc uid a-evs))
            as bev = (cdr (assoc uid b-evs))
@@ -668,7 +668,7 @@ changes."
          (lev (cdr lpair))
          (headline (or (plist-get lev :headline)
                        (plist-get event :headline))))
-e
+
     (funcall local-doc-updates-add
              (if (plist-get event :delete)
                  (let ((parent (org-element-property :parent headline)))
