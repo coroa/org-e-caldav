@@ -92,15 +92,16 @@
   "Property name by which to mark conflicts.")
 
 (defvar org-e-caldav-delete-property "CALDAVDELETE"
-  "Property name by which to mark deletes.")
+  "Property name by which to mark deletes. Needed to represent
+conflicts where one side has been deleted.")
 
 (defvar org-e-caldav-conflicts-buffer "*Org-e-caldav conflicts*"
   "Name of the conflict buffer")
 
 ;; Internal state variables
 
-;;; The following state definitions and functions come literally from
-;;; os.el, written by Aurélien Aptel
+;;; The following state definitions and functions come more or less
+;;; literally from os.el, written by Aurélien Aptel
 
 (defvar org-e-caldav-state-file (concat user-emacs-directory "org-e-caldav-state")
   "Path to org-e-caldav state file.")
@@ -176,8 +177,8 @@ and the :parent property of the timestamp element."
 	  (prin1 cur (current-buffer)))
 	(insert "\n")))))
 
-;;; The following is taken to large parts from icalendar.el, written
-;;; by Ulf Jasper.
+;;; The following is taken to large parts from org-caldav.el, where it
+;;; was taken from icalendar.el, written by Ulf Jasper. ;)
 
 (defun org-e-caldav-ical-to-event (uid)
   "Convert icalendar event in current buffer.
