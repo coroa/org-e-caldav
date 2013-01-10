@@ -39,20 +39,14 @@
 ;; - Create a new calendar; the name does not matter. Again, do *not*
 ;;   use your precious main calendar.
 ;;
-;; - Set `org-e-caldav-url' to the base address of your CalDAV server:
-;;    * Owncloud: https://OWNCLOUD-SERVER-URL/remote.php/caldav/calendars/USERID
-;;    * Google: https://www.google.com/calendar/dav
-;;
-;; - Set `org-e-caldav-calendar-id' to the calendar-id of your new calendar:
-;;    * OwnCloud: Simply the name of the calendar.
-;;    * Google: Click on 'calendar settings' and the id will be shown
-;;      next to "Calendar Address". It is of the form
-;;      ID@group.calendar.google.com. Do *not* omit the domain.
+;; - Set `org-e-caldav-url' to the calendar address of your CalDAV
+;;   server, it is usually made up of a base url + a calendar id
+;;    * Owncloud: https://OWNCLOUD-SERVER-URL/remote.php/caldav/calendars/USERID/CALENDAR/
+;;    * Google: https://www.google.com/calendar/dav/ID@group.calendar.google.com/events/
+;;      where the ID is shown in the 'calendar settings' on Google.
 ;;
 ;; - Set `org-e-caldav-files' to the list of org files you would like to
-;;   sync. For everything else, you can use the org-e-icalendar-*
-;;   variables, since org-e-caldav uses that package to generate the
-;;   events.
+;;   sync. The inbox file is added automatically.
 ;;
 ;; - Set `org-e-caldav-inbox' to an org filename where new entries from
 ;;   the calendar should be stored.
@@ -68,16 +62,14 @@
 (require 'org-element)
 (require 'org-e-icalendar)
 
-(defvar org-e-caldav-url "https://www.google.com/calendar/dav"
-  "Base URL for CalDAV access.")
-
-(defvar org-e-caldav-calendar-id "abcde1234@group.calendar.google.com"
-  "ID of your calendar.")
+(defvar org-e-caldav-url (concat "https://www.google.com/calendar/dav/"
+                                 "ID@group.calendar.google.com"
+                                 "/events/")
+  "Calendar URL for CalDAV access. The following '/' is mandatory.")
 
 (defvar org-e-caldav-files '("~/org/appointments.org")
   "List of files which should end up in calendar.
-Do NOT put `org-e-caldav-inbox' in here or you'll get duplicate
-entries.")
+`org-e-caldav-inbox' is added automatically.")
 
 (defvar org-e-caldav-inbox "~/org/from-calendar.org"
   "Filename for putting new entries obtained from calendar.")
@@ -88,7 +80,7 @@ entries.")
 ;; Variables users usually should not have to touch
 
 (defvar org-e-caldav-uid-property "CALDAVUID"
-  "Property name in which to save the associated CAL ")
+  "Property name in which to save the associated caldav uid.")
 
 ;; Internal state variables
 
@@ -153,14 +145,14 @@ and the :parent property of the timestamp element."
 (defun org-e-caldav-show-conflicts (conflicts)
   "Show conflicts CONFLICTS, which looks like
    ((file1 lev1 . rev1) (file2 lev2 . rev2) ..)
-   in conflict window."
+in conflict window."
   (when conflicts
     (let ((buf (get-buffer-create org-e-caldav-conflicts-buffer)))
       (with-help-window buf
         (with-current-buffer buf
           (erase-buffer)
           (org-mode)
-          (insert "There were some conflicts while merging.  Here
+          (insert "There were some conflicts while merging. Here
 are links to the problematic items. Edit the files to contain,
 what you want to keep and sync again. The :sync property tells
 you their origin.\n\n")
@@ -174,21 +166,25 @@ you their origin.\n\n")
 
 ;;; A few functions from org-caldav.el by David Engster
 
-(defun org-e-caldav-events-url ()
-  "Return URL for events."
-  (if (string-match "google\\.com" org-e-caldav-url)
-      (concat org-e-caldav-url "/" org-e-caldav-calendar-id "/events/")
-    (concat org-e-caldav-url "/" org-e-caldav-calendar-id "/")))
-
 (defun org-e-caldav-check-connection ()
   "Check connection by doing a PROPFIND on CalDAV URL."
   (org-e-caldav-debug-print (format "Check connection - doing a PROPFIND on %s."
-				  (org-e-caldav-events-url)))
-  (let ((output (url-dav-request (org-e-caldav-events-url) "PROPFIND" nil nil 1)))
+				  org-e-caldav-url))
+  (let ((output (url-dav-request org-e-caldav-url "PROPFIND" nil nil 1)))
   (unless (eq (plist-get (cdar output) 'DAV:status) 200)
     (org-e-caldav-debug-print "Got error status from PROPFIND: " output)
-    (error "Could not query CalDAV URL %s." (org-e-caldav-events-url))))
+    (error "Could not query CalDAV URL %s." org-e-caldav-url)))
   t)
+
+(defun org-e-caldav-debug-print (&rest objects)
+  "Print OBJECTS into debug buffer if `org-e-caldav-debug' is non-nil."
+  (when org-e-caldav-debug
+    (with-current-buffer (get-buffer-create org-e-caldav-debug-buffer)
+      (dolist (cur objects)
+	(if (stringp cur)
+	    (insert cur)
+	  (prin1 cur (current-buffer)))
+	(insert "\n")))))
 
 ;;; The following is taken to large parts from icalendar.el, written
 ;;; by Ulf Jasper.
@@ -323,7 +319,7 @@ event."
     
     (with-current-buffer (flet ((url-cache-extract (x) nil))
                            (url-retrieve-synchronously
-                            (concat (org-e-caldav-events-url) (concat uid ".ics"))))
+                            (concat org-e-caldav-url (concat uid ".ics"))))
       (case url-http-response-status
         (304 old-pair)
         (200 (delete-region
@@ -338,7 +334,7 @@ event."
 (defun org-e-caldav-fetch-eventlist ()
   "Fetch list of events from remote calendar."
   (mapcar 'file-name-sans-extension
-          (url-dav-directory-files (org-e-caldav-events-url) nil "\\.ics$")))
+          (url-dav-directory-files org-e-caldav-url nil "\\.ics$")))
 
 (defun org-e-caldav-find-property-drawer (elem)
   "Return the first property drawer directly under headline."
@@ -514,6 +510,18 @@ match for which FUN doesn't return nil and return that value."
                (funcall fun parent))
           (org-e-caldav-element-closest parent types fun)))))
 
+(defun org-e-caldav-find-events (doc)
+  "Find a list of events in the current buffer. An event is
+represented by a headline containing an active timestamp."
+  `(:events
+    ,(mapcar (lambda (ts) (org-e-caldav-headline-to-event
+                      (org-e-caldav-element-closest ts 'headline 'identity) ts))
+             (org-element-map doc
+                              'timestamp
+                              (lambda (x)
+                                (when (memq (org-element-property :type x)
+                                            '(active active-range)) x))))))
+
 (defun org-e-caldav-element-update-buffer (updates local-doc)
   "Updates the current buffer according to the list updates,
 which has the form '( elem1 elem2 elem3 ... ). Nested elements
@@ -556,17 +564,6 @@ org-element-swap-A-B."
             (delete-region beg end)
             (insert (org-element-interpret-data elem))))))))
 
-(defun org-e-caldav-find-events (doc)
-  "Find a list of events in the current buffer. An event is
-represented by a headline containing an active timestamp."
-  `(:events
-    ,(mapcar (lambda (ts) (org-e-caldav-headline-to-event
-                      (org-e-caldav-element-closest ts 'headline 'identity) ts))
-             (org-element-map doc
-                              'timestamp
-                              (lambda (x)
-                                (when (memq (org-element-property :type x)
-                                            '(active active-range)) x))))))
 
 (defun org-e-caldav-timestamp-diff (a b)
   "Do timestamps a and b differ?"
@@ -622,21 +619,6 @@ The form of the alist is ((:property . (valueA valueB)...)"
      (loop for (uid . ev) in b-evs
            if (null uid) collect (cons nil ev)))))
 
-(defun org-e-caldav-eventlist-dups (eventlist)
-  "Return non-nil if EVENTLIST contains events with the same UID.
-The value returned is a list of duplicated ids."
-  (let ((hash (make-hash-table :test 'equal))
-        (dups))
-    (mapc (lambda (x)
-            (let ((uid (car x)))
-              (when uid
-                (puthash uid (cons (cdr x) (gethash uid hash)) hash))))
-          (plist-get eventlist :events))
-    (maphash (lambda (uid events)
-               (when (> (length events) 1)
-                 (push (cons uid events) dups))) hash)
-    dups))
-
 (defun org-e-caldav-prepare-merge (local remote luidlist-add delete-add)
   "From LOCAL diff and REMOTE diff compute the necessary local
 and remote changes and sort them into a plist with the
@@ -689,126 +671,25 @@ where the ev are normal events."
     (loop for (uid . rev) in remote do
           (when (and uid (not (gethash uid added)))
             (push (or rev `(:uid ,uid :delete t)) lups)))
-
+    
     `(:local-updates ,lups
                      :remote-updates ,rups
                      :conflicts ,conflicts)))
 
-
-
-(defun org-e-caldav-sync-new-remotes (inbox-file filter-updated)
-  (with-current-buffer (find-file-noselect inbox-file)
-    (save-excursion
-      (let* ((local-doc (org-element-parse-buffer))
-             local-doc-updates
-             (local-doc-updates-add (lambda (x) (push x local-doc-updates)))
-             (state (or (org-e-caldav-get-state inbox-file)
-                        '(:events nil))))
-
-        (loop for uid in (funcall filter-updated (org-e-caldav-fetch-eventlist))
-              as (ruid . ev) = (org-e-caldav-fetch-event uid state) do
-              (org-e-caldav-merge-new-local ev state local-doc-updates-add local-doc 1))
-        
-        (org-e-caldav-element-update-buffer local-doc-updates local-doc)
-        (org-e-caldav-set-state inbox-file state)
-
-        (message "Synchronization of file \"%s\" complete." inbox-file)))))
-
-
-(defun org-e-caldav-sync-file (file updated-append delete-add)
-  (org-e-caldav-debug-print "Starting syncing FILE %s.\n" file)
-  (with-current-buffer (find-file-noselect file)
-    (save-excursion
-      (let* ((local-doc (org-element-parse-buffer))
-             local-doc-updates
-             (local-doc-updates-add (lambda (x) (push x local-doc-updates)))
-             (local (org-e-caldav-find-events local-doc)))
-        
-        (when (org-e-caldav-eventlist-dups local)
-          (error "Sync file \"%s\" contains unmerged events." file))
-
-        ;; local          state          remote
-        ;;    \          /    \          /
-        ;;    parse    load   load     fetch
-        ;;      \      /        \      /
-        ;;     local-diff      remote-diff
-        ;;             \        /
-        ;;              \      /
-        ;;               merge
-        ;;              /     \
-        ;;             /    merge-remote  --> push changes to caldav  
-        ;;            |        |
-        ;;      merge-local ------- - - - --> update local org-element tree
-        ;;              \     /
-        ;;               local
-        ;;                 v
-        ;;             new state
-
-        (let* ((state (org-e-caldav-get-state file))
-               (luidlist (delq nil (mapcar (lambda (x) (car x)) (plist-get local :events))))
-               (luidlist-add (lambda (x) (push x luidlist)))
-               uidsreset (uidsreset-add (lambda (x) (push x uidsreset)))
-               (remote
-                `(:events
-                  ,(mapcar (lambda (x) (org-e-caldav-fetch-event x state)) luidlist)))
-               (local-diff (org-e-caldav-eventlist-diff state local))
-               (remote-diff (org-e-caldav-eventlist-diff state remote))
-               (merge (org-e-caldav-prepare-merge local-diff remote-diff
-                                                  luidlist-add delete-add)))
-
-          (mapc  (lambda (x) (org-e-caldav-merge-remote x uidsreset-add))
-                 (plist-get merge :remote-updates))
-          (mapc (lambda (x) (unless (memq (plist-get x :uid) uidsreset)
-                         (org-e-caldav-merge-local x local local-doc-updates-add)))
-                (plist-get merge :local-updates))
-
-          (mapc (lambda (x) (org-e-caldav-merge-conflict x uidsreset-add local-doc-updates-add))
-                (plist-get merge :conflicts))
-
-          (org-e-caldav-element-update-buffer local-doc-updates local-doc)
-
-          (org-e-caldav-set-state file local uidsreset)
-          (message "Synchronization of file \"%s\" complete." file)
-
-          (funcall updated-append luidlist)
-          (plist-get merge :conflicts))))))
-
-(defun org-e-caldav-sync ()
-  (interactive)
-  (org-e-caldav-debug-print "Starting sync.\n")
-  (org-e-caldav-load-state)
-  (let* ((files (adjoin org-e-caldav-inbox org-e-caldav-files))
-         (updated (make-hash-table :test 'equal))
-         (updated-append (lambda (x) (mapc (lambda (y) (puthash y t updated)) x)))
-         (filter-updated (lambda (x) (loop for y in x unless (gethash y updated) collect y)))
-         deleted
-         (delete-add (lambda (x) (push x deleted)))
-         (conflicts
-          (delq nil (mapcar (lambda (file)
-                              (let ((cfs (org-e-caldav-sync-file
-                                          file updated-append delete-add)))
-                                (when cfs (cons file cfs))))
-                            files))))
-
-    (mapc 'org-e-caldav-delete-event (funcall filter-updated deleted))
-    (org-e-caldav-sync-new-remotes org-e-caldav-inbox filter-updated)
-
-    (org-e-caldav-show-conflicts conflicts))
-  (org-e-caldav-write-state)
-  (org-e-caldav-debug-print "Finished sync.\n"))
-
-
-(defun org-e-caldav-merge-new-local (event state local-doc-updates-add inbox level)
-  "Update the local-doc org-element tree to include the new
-remote event."
-  (funcall local-doc-updates-add
-           (org-element-adopt-elements
-            inbox
-            (org-e-caldav-event-to-headline event nil level)))
-
-  (plist-put state :events
-             (acons uid event (plist-get state :events))))
-
+(defun org-e-caldav-eventlist-dups (eventlist)
+  "Return non-nil if EVENTLIST contains events with the same UID.
+The value returned is a list of duplicated ids."
+  (let ((hash (make-hash-table :test 'equal))
+        (dups))
+    (mapc (lambda (x)
+            (let ((uid (car x)))
+              (when uid
+                (puthash uid (cons (cdr x) (gethash uid hash)) hash))))
+          (plist-get eventlist :events))
+    (maphash (lambda (uid events)
+               (when (> (length events) 1)
+                 (push (cons uid events) dups))) hash)
+    dups))
 
 (defun org-e-caldav-merge-remote (event uidsreset-add)
   "Write a local change to a remote resource."
@@ -818,7 +699,7 @@ remote event."
     (org-e-caldav-debug-print (format "Putting event \"%s\" UID %s.\n"
                                       (plist-get event :summary) uid))
     (unless (url-dav-save-resource
-             (concat (org-e-caldav-events-url) uid ".ics")
+             (concat org-e-caldav-url uid ".ics")
              (encode-coding-string
               (org-e-caldav-event-to-ical event)
               'utf-8-dos) "text/calendar; charset=UTF-8")
@@ -879,20 +760,122 @@ other to the org-element tree."
 
     (funcall uidsreset-add (plist-get lev :uid))))
 
+(defun org-e-caldav-sync-file (file updated-append delete-add)
+  (org-e-caldav-debug-print "Starting syncing FILE %s.\n" file)
+  (with-current-buffer (find-file-noselect file)
+    (save-excursion
+      (let* ((local-doc (org-element-parse-buffer))
+             local-doc-updates
+             (local-doc-updates-add (lambda (x) (push x local-doc-updates)))
+             (local (org-e-caldav-find-events local-doc)))
+        
+        (when (org-e-caldav-eventlist-dups local)
+          (error "Sync file \"%s\" contains unmerged events." file))
+
+        ;; local          state          remote
+        ;;    \          /    \          /
+        ;;    parse    load   load     fetch
+        ;;      \      /        \      /
+        ;;     local-diff      remote-diff
+        ;;             \        /
+        ;;              \      /
+        ;;               merge
+        ;;              /     \
+        ;;             /    merge-remote  --> push changes to caldav  
+        ;;            |        |
+        ;;      merge-local ------- - - - --> update local org-element tree
+        ;;              \     /
+        ;;               local
+        ;;                 v
+        ;;             new state
+
+        (let* ((state (org-e-caldav-get-state file))
+               (luidlist (delq nil (mapcar (lambda (x) (car x)) (plist-get local :events))))
+               (luidlist-add (lambda (x) (push x luidlist)))
+               uidsreset (uidsreset-add (lambda (x) (push x uidsreset)))
+               (remote
+                `(:events
+                  ,(mapcar (lambda (x) (org-e-caldav-fetch-event x state)) luidlist)))
+               (local-diff (org-e-caldav-eventlist-diff state local))
+               (remote-diff (org-e-caldav-eventlist-diff state remote))
+               (merge (org-e-caldav-prepare-merge local-diff remote-diff
+                                                  luidlist-add delete-add)))
+
+          (mapc  (lambda (x) (org-e-caldav-merge-remote x uidsreset-add))
+                 (plist-get merge :remote-updates))
+          (mapc (lambda (x) (unless (memq (plist-get x :uid) uidsreset)
+                         (org-e-caldav-merge-local x local local-doc-updates-add)))
+                (plist-get merge :local-updates))
+
+          (mapc (lambda (x) (org-e-caldav-merge-conflict x uidsreset-add local-doc-updates-add))
+                (plist-get merge :conflicts))
+
+          (org-e-caldav-element-update-buffer local-doc-updates local-doc)
+
+          (org-e-caldav-set-state file local uidsreset)
+          (message "Synchronization of file \"%s\" complete." file)
+
+          (funcall updated-append luidlist)
+          (plist-get merge :conflicts))))))
+
+(defun org-e-caldav-merge-new-local (event state local-doc-updates-add inbox level)
+  "Update the local-doc org-element tree to include the new
+remote event."
+  (funcall local-doc-updates-add
+           (org-element-adopt-elements
+            inbox
+            (org-e-caldav-event-to-headline event nil level)))
+
+  (plist-put state :events
+             (acons uid event (plist-get state :events))))
+
+(defun org-e-caldav-sync-new-remotes (inbox-file filter-updated)
+  (with-current-buffer (find-file-noselect inbox-file)
+    (save-excursion
+      (let* ((local-doc (org-element-parse-buffer))
+             local-doc-updates
+             (local-doc-updates-add (lambda (x) (push x local-doc-updates)))
+             (state (or (org-e-caldav-get-state inbox-file)
+                        '(:events nil))))
+
+        (loop for uid in (funcall filter-updated (org-e-caldav-fetch-eventlist))
+              as (ruid . ev) = (org-e-caldav-fetch-event uid state) do
+              (org-e-caldav-merge-new-local ev state local-doc-updates-add local-doc 1))
+        
+        (org-e-caldav-element-update-buffer local-doc-updates local-doc)
+        (org-e-caldav-set-state inbox-file state)
+
+        (message "Synchronization of file \"%s\" complete." inbox-file)))))
+
 (defun org-e-caldav-delete-event (uid)
   "Delete event with UID from calendar."
   (org-e-caldav-debug-print (format "Deleting event UID %s.\n" uid))
-  (url-dav-delete-file (concat (org-e-caldav-events-url) uid ".ics")))
+  (url-dav-delete-file (concat org-e-caldav-url uid ".ics")))
 
-(defun org-e-caldav-debug-print (&rest objects)
-  "Print OBJECTS into debug buffer if `org-e-caldav-debug' is non-nil."
-  (when org-e-caldav-debug
-    (with-current-buffer (get-buffer-create org-e-caldav-debug-buffer)
-      (dolist (cur objects)
-	(if (stringp cur)
-	    (insert cur)
-	  (prin1 cur (current-buffer)))
-	(insert "\n")))))
+(defun org-e-caldav-sync ()
+  (interactive)
+  (org-e-caldav-debug-print "Starting sync.\n")
+  (org-e-caldav-check-connection)
+  (org-e-caldav-load-state)
+  (let* ((files (adjoin org-e-caldav-inbox org-e-caldav-files))
+         (updated (make-hash-table :test 'equal))
+         (updated-append (lambda (x) (mapc (lambda (y) (puthash y t updated)) x)))
+         (filter-updated (lambda (x) (loop for y in x unless (gethash y updated) collect y)))
+         deleted
+         (delete-add (lambda (x) (push x deleted)))
+         (conflicts
+          (delq nil (mapcar (lambda (file)
+                              (let ((cfs (org-e-caldav-sync-file
+                                          file updated-append delete-add)))
+                                (when cfs (cons file cfs))))
+                            files))))
+
+    (mapc 'org-e-caldav-delete-event (funcall filter-updated deleted))
+    (org-e-caldav-sync-new-remotes org-e-caldav-inbox filter-updated)
+
+    (org-e-caldav-show-conflicts conflicts))
+  (org-e-caldav-write-state)
+  (org-e-caldav-debug-print "Finished sync.\n"))
 
 (provide 'org-e-caldav)
 
