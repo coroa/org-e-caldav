@@ -339,9 +339,8 @@ update the first found property drawer underneath."
   
   (if (null elem)
       `(property-drawer nil
-                        ,@(mapcar
-                          (lambda (x) `(node-property (:key ,(car x) :value ,(cdr x))))
-                          alist))
+                        ,@(loop for (k . v) in alist if v
+                                collect `(node-property (:key ,k :value ,v))))
     (let* ((drawer (org-e-caldav-find-property-drawer elem))
            (added (make-hash-table)))
       (apply 'org-element-set-contents drawer
