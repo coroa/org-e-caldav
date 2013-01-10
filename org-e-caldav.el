@@ -716,6 +716,7 @@ where the ev are normal events."
 
 
 (defun org-e-caldav-sync-file (file updated-append delete-add)
+  (org-e-caldav-debug-print "Starting syncing FILE %s.\n" file)
   (with-current-buffer (find-file-noselect file)
     (save-excursion
       (let* ((local-doc (org-element-parse-buffer))
@@ -774,6 +775,7 @@ where the ev are normal events."
 
 (defun org-e-caldav-sync ()
   (interactive)
+  (org-e-caldav-debug-print "Starting sync.\n")
   (let* ((files (adjoin org-e-caldav-inbox org-e-caldav-files))
          (updated (make-hash-table :test 'equal))
          (updated-append (lambda (x) (mapc (lambda (y) (puthash y t updated)) x)))
@@ -790,7 +792,8 @@ where the ev are normal events."
     (mapc 'org-e-caldav-delete-event (funcall filter-updated deleted))
     (org-e-caldav-sync-new-remotes org-e-caldav-inbox filter-updated)
 
-    (org-e-caldav-show-conflicts conflicts)))
+    (org-e-caldav-show-conflicts conflicts))
+  (org-e-caldav-debug-print "Finished sync.\n"))
 
 
 (defun org-e-caldav-merge-new-local (event state local-doc-updates-add inbox level)
@@ -809,7 +812,9 @@ remote event."
   "Write a local change to a remote resource."
   (let* ((uid (plist-get event :uid))
          (headline (plist-get event :headline)))
-        
+
+    (org-e-caldav-debug-print (format "Putting event \"%s\" UID %s.\n"
+                                      (plist-get event :summary) uid))
     (unless (url-dav-save-resource
              (concat (org-e-caldav-events-url) uid ".ics")
              (encode-coding-string
@@ -826,16 +831,19 @@ changes."
          (lev (cdr lpair))
          (headline (or (plist-get lev :headline)
                        (plist-get event :headline))))
-    
+
     (funcall local-doc-updates-add
              (if (plist-get event :delete)
                  (let ((parent (org-element-property :parent headline)))
+                   (org-e-caldav-debug-print (format "Deleting local headline \"%s\" with UID %s.\n"
+                                                     (plist-get lev :summary) uid))    
                    (plist-put local :events (delq lpair (plist-get local :events)))
                    (when parent
                      (apply 'org-element-set-contents parent
                             (delq headline (org-element-contents parent)))
                      parent))
-               
+               (org-e-caldav-debug-print (format "Updating local headline \"%s\" with UID %s.\n"
+                                                 (plist-get event :summary) uid))
                (when lpair
                  (setcdr lpair event))
                (org-e-caldav-event-to-headline event headline)))))
@@ -851,6 +859,10 @@ other to the org-element tree."
          (lheadlinec (memq lheadline
                            (org-element-contents parent)))
          (rheadline (org-e-caldav-element-copy lheadline parent)))
+
+    (org-e-caldav-debug-print
+     (format "Adding conflicting remote headline \"%s\" with UID %s.\n"
+             (plist-get lev :summary) (plist-get lev :uid)))
     
     ;; insert rheadline in linked list after lheadline
     (setcdr lheadlinec (cons rheadline (cdr lheadlinec)))
