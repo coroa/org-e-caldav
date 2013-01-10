@@ -62,6 +62,7 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'url-dav)
 (require 'icalendar)
 (require 'org-element)
@@ -112,18 +113,17 @@ and the :parent property of the timestamp element."
                     (spair (assoc uid (plist-get state :events))))
                 (if spair
                     (setcdr lpair (cdr spair))
-                  (plist-put eventlist :events
-                             (delq lpair (plist-get eventlist :events))))))
+                  (cl-callf2 delq lpair (cl-getf eventlist :events)))))
             uidsreset)))
   
-  (loop for pair in (plist-get eventlist :events)
-        as (uid . event) = pair
-        do
-        (org-element-put-property (plist-get event :timestamp)
-                                  :parent nil)
-        (plist-put event :headline nil)
-        unless uid
-        do (setcar pair (plist-get event :uid)))
+  (cl-loop for pair in (plist-get eventlist :events)
+           as (uid . event) = pair
+           do
+           (org-element-put-property (plist-get event :timestamp)
+                                     :parent nil)
+           (plist-put event :headline nil)
+           unless uid
+           do (setcar pair (plist-get event :uid)))
 
   (setq eventlist
         (plist-put eventlist :date-state (current-time)))
@@ -345,24 +345,24 @@ update the first found property drawer underneath."
   
   (if (null elem)
       `(property-drawer nil
-                        ,@(loop for (k . v) in alist if v
-                                collect `(node-property (:key ,k :value ,v))))
+                        ,@(cl-loop for (k . v) in alist if v
+                                   collect `(node-property (:key ,k :value ,v))))
     (let* ((drawer (org-e-caldav-find-property-drawer elem))
            (added (make-hash-table)))
       (apply 'org-element-set-contents drawer
-             (loop for elem in (cddr drawer)
-                   as x = (assoc (org-element-property :key elem) alist)
-                   if (null x)
-                   collect elem
-                   else if (cdr x) do
-                   (org-element-put-property elem :value (cdr x))
-                   (puthash (car x) t added)
-                   and collect elem))
+             (cl-loop for elem in (cddr drawer)
+                      as x = (assoc (org-element-property :key elem) alist)
+                      if (null x)
+                      collect elem
+                      else if (cdr x) do
+                      (org-element-put-property elem :value (cdr x))
+                      (puthash (car x) t added)
+                      and collect elem))
 
       (apply 'org-element-adopt-elements drawer
-             (loop for (key . val) in alist
-                   unless (or (null val) (gethash key added))
-                   collect `(node-property (:key ,key :value ,val)))))))
+             (cl-loop for (key . val) in alist
+                      unless (or (null val) (gethash key added))
+                      collect `(node-property (:key ,key :value ,val)))))))
 
 (defun org-e-caldav-event-to-headline (event &optional headline level)
   "Create a new org-element headline or update an existing
@@ -427,13 +427,13 @@ are skipped and collected via basket-add."
     (cons type
           (cons
            properties
-           (loop for c in contents
-                 if (stringp c)
-                 collect (org-e-caldav-strip-text-properties c)
-                 else if (memq (car c) (cdr restriction))
-                 collect (org-e-caldav-normalize-description c basket-add)
-                 else if basket-add
-                 do (funcall basket-add c))))))
+           (cl-loop for c in contents
+                    if (stringp c)
+                    collect (org-e-caldav-strip-text-properties c)
+                    else if (memq (car c) (cdr restriction))
+                    collect (org-e-caldav-normalize-description c basket-add)
+                    else if basket-add
+                    do (funcall basket-add c))))))
 
 (defun org-e-caldav-extract-description-from-section (section &optional basket-add)
   "Return the interpreted section after normalizing it."
@@ -501,10 +501,10 @@ org-element-swap-A-B."
   (save-excursion
     ;; if the :begin or :end property for any element is missing,
     ;; replace the whole buffer
-    (if (loop for elem in updates
-              unless (and (numberp (org-element-property :begin elem))
-                          (numberp (org-element-property :end elem)))
-              return t)
+    (if (cl-loop for elem in updates
+                 unless (and (numberp (org-element-property :begin elem))
+                             (numberp (org-element-property :end elem)))
+                 return t)
         (progn
           (delete-region (point-min) (point-max))
           (insert (org-element-interpret-data local-doc)))
@@ -533,21 +533,21 @@ org-element-swap-A-B."
 
 (defun org-e-caldav-timestamp-diff (a b)
   "Do timestamps a and b differ?"
-  (loop for key in '(:type
-                     :year-begin
-                     :month-begin
-                     :day-begin
-                     :hour-begin
-                     :minute-begin
-                     :year-end
-                     :month-end
-                     :day-end
-                     :minute-end
-                     :repeater-unit
-                     :repeater-value)
-        unless (equal (org-element-property key a)
-                      (org-element-property key b))
-        return t))
+  (cl-loop for key in '(:type
+                        :year-begin
+                        :month-begin
+                        :day-begin
+                        :hour-begin
+                        :minute-begin
+                        :year-end
+                        :month-end
+                        :day-end
+                        :minute-end
+                        :repeater-unit
+                        :repeater-value)
+           unless (equal (org-element-property key a)
+                         (org-element-property key b))
+           return t))
 
 (defun org-e-caldav-event-diff (a b)
   "Return an alist of properties that differ in A and B or nil if A = B.
@@ -557,35 +557,35 @@ The form of the alist is ((:property . (valueA valueB)...)"
          (tb (plist-get b :timestamp)))
      (when (org-e-caldav-timestamp-diff ta tb)
        `((:timestamp . (,ta ,tb)))))
-   (loop for key in '(:summary :description)
-         as va = (plist-get a key)
-         as vb = (plist-get b key)
-         unless (equal va vb)
-         collect `(,key . (,va ,vb)))))
+   (cl-loop for key in '(:summary :description :delete)
+            as va = (plist-get a key)
+            as vb = (plist-get b key)
+            unless (equal va vb)
+            collect `(,key . (,va ,vb)))))
 
 (defun org-e-caldav-eventlist-diff (a b)
   "Return a diff eventlist which turns eventlist A to B when applied."
   (let* ((a-evs (plist-get a :events))
          (b-evs (plist-get b :events))
          (uid-list
-          (append
-           (loop for (uid . ev) in a-evs collect uid)
-           (loop for (uid . ev) in b-evs
-                 if uid collect uid))))
+          (nconc
+           (cl-loop for (uid . ev) in a-evs collect uid)
+           (cl-loop for (uid . ev) in b-evs
+                    if uid collect uid))))
     (delete-dups uid-list)
 
     (nconc
-     (loop for uid in uid-list
-           as aev = (cdr (assoc uid a-evs))
-           as bev = (cdr (assoc uid b-evs))
-           if (or (null aev)
-                  (null bev)
-                  (org-e-caldav-event-diff aev bev))
-           collect (cons uid bev))
-     (loop for (uid . ev) in b-evs
-           if (null uid) collect (cons nil ev)))))
+     (cl-loop for uid in uid-list
+              as aev = (cdr (assoc uid a-evs))
+              as bev = (cdr (assoc uid b-evs))
+              if (or (null aev)
+                     (null bev)
+                     (org-e-caldav-event-diff aev bev))
+              collect (cons uid bev))
+     (cl-loop for (uid . ev) in b-evs
+              if (null uid) collect (cons nil ev)))))
 
-(defun org-e-caldav-prepare-merge (local remote state luidlist-add delete-add)
+(defun org-e-caldav-prepare-merge (local remote state luidlist-add luidlist-delete delete-add)
   "From LOCAL diff and REMOTE diff compute the necessary local
 and remote changes and sort them into a plist with the
 structure (:local-updates (..)
@@ -597,7 +597,6 @@ where the ev are normal events."
         lups rups conflicts)
 
     ;; add all remote bugs
-    (loop for (uid . lev) in local do
           (let* ((rpair (assoc uid remote))
                  (rev (cdr rpair)))
 
@@ -631,14 +630,15 @@ where the ev are normal events."
                         (org-e-caldav-event-diff lev (cdr (assoc uid state))))
                 (plist-put lev :sync nil)
                 (push lev lups))))
+    (cl-loop for (uid . lev) in local do
             
             ;; mark it
             (puthash uid t added)))
 
     ;; add changed remote events which are the unmarked events in local
-    (loop for (uid . rev) in remote do
-          (when (and uid (not (gethash uid added)))
-            (push (or rev `(:uid ,uid :delete t)) lups)))
+    (cl-loop for (uid . rev) in remote do
+             (when (and uid (not (gethash uid added)))
+               (push (or rev `(:uid ,uid :delete t)) lups)))
     
     `(:local-updates ,lups
                      :remote-updates ,rups
@@ -687,8 +687,9 @@ changes."
              (if (plist-get event :delete)
                  (let ((parent (org-element-property :parent headline)))
                    (org-e-caldav-debug-print (format "Deleting local headline \"%s\" with UID %s."
-                                                     (plist-get lev :summary) uid))    
-                   (plist-put local :events (delq lpair (plist-get local :events)))
+                                                     (plist-get lev :summary) uid))
+                   
+                   (cl-callf2 delq lpair (cl-getf local :events))
                    (when parent
                      (apply 'org-element-set-contents parent
                             (delq headline (org-element-contents parent)))
@@ -714,9 +715,9 @@ changes."
            (ret (list type props)))
       (plist-put props :parent parent)
       (when (eq type 'headline)
-        (plist-put props :title
-                   (mapcar (lambda (child) (org-e-caldav-element-copy child ret))
-                           (plist-get props :title))))
+        (cl-callf2 mapcar
+            (lambda (child) (org-e-caldav-element-copy child ret))
+            (cl-getf props :title)))
       (setf (cddr ret)
             (mapcar (lambda (child) (org-e-caldav-element-copy child ret))
                     (cddr element)))
@@ -822,8 +823,7 @@ remote event."
             inbox
             (org-e-caldav-event-to-headline event nil level)))
 
-  (plist-put state :events
-             (acons uid event (plist-get state :events))))
+  (push (cons uid event) (cl-getf state :events)))
 
 (defun org-e-caldav-sync-new-remotes (inbox-file filter-updated)
   (org-e-caldav-debug-print "Looking for new remote events to add to inbox.")
@@ -837,9 +837,8 @@ remote event."
              (events (mapcar (lambda (uid) (org-e-caldav-fetch-event uid state))
                              (funcall filter-updated (org-e-caldav-fetch-eventlist)))))
 
-        (loop for uid in events
-              as (ruid . ev) = (org-e-caldav-fetch-event uid state) do
-              (org-e-caldav-merge-new-local ev state local-doc-updates-add local-doc 1))
+        (cl-loop for (uid . ev) in events do
+                 (org-e-caldav-merge-new-local ev state local-doc-updates-add local-doc 1))
         
         (org-e-caldav-element-update-buffer local-doc-updates local-doc)
         (org-e-caldav-set-state inbox-file state)
@@ -866,12 +865,12 @@ are links to the problematic items. Edit the files to contain,
 what you want to keep and sync again. The :sync property tells
 you their origin.\n\n")
           
-          (loop for (file . cfs) in conflicts do
-                (loop for (lev . rev) in cfs do
-                      (insert (format "- %s (in [[file:%s::*%s][%s]])\n"
-                                      (plist-get lev :summary) file
-                                      (plist-get lev :summary) file)
-                              "\n"))))))))
+          (cl-loop for (file . cfs) in conflicts do
+                   (cl-loop for (lev . rev) in cfs do
+                            (insert (format "- %s (in [[file:%s::*%s][%s]])\n"
+                                            (plist-get lev :summary) file
+                                            (plist-get lev :summary) file)
+                                    "\n"))))))))
 
 (defun org-e-caldav-sync ()
   (interactive)
