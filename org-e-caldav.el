@@ -244,8 +244,8 @@ which can be fed into `org-e-caldav-insert-org-entry'."
           repeater
           (when rrule
             (let* ((rrule-props (icalendar--split-value rrule))
-                   (frequency   (cadr (assoc 'FREQ rrule-props)))
-                   (interval    (read (or (cadr (assoc 'INTERVAL rrule-props)) "1"))))
+                   (frequency   (cadr (assq 'FREQ rrule-props)))
+                   (interval    (read (or (cadr (assq 'INTERVAL rrule-props)) "1"))))
               `(:repeater-type
                 cumulate
                 :repeater-unit
@@ -416,7 +416,7 @@ are skipped and collected via basket-add."
   (let* ((type (car elem))
          (properties (cadr elem))
          (contents (cddr elem))
-         (restriction (assoc type org-e-caldav-normalize-description-restriction)))
+         (restriction (assq type org-e-caldav-normalize-description-restriction)))
     (cons type
           (cons
            properties
