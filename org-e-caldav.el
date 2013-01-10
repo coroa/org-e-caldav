@@ -439,31 +439,6 @@ are skipped and collected via basket-add."
     (set-text-properties 0 (length ret) nil ret)
     ret))
 
-(defun org-e-caldav-element-copy (element parent)
-  "Return a deep copy of an org-element element."
-  (cond
-   ((stringp element)
-    (let ((ret (copy-sequence element)))
-      (put-text-property 0 (length ret) :parent parent ret)
-      ret))
-   ((and (consp element)
-         (symbolp (car element)))
-    (let* ((type (car element))
-           (props (copy-sequence (cadr element)))
-           (ret (list type props)))
-      (plist-put props :parent parent)
-      (when (eq type 'headline)
-        (plist-put props :title
-                   (mapcar (lambda (child) (org-e-caldav-element-copy child ret))
-                           (plist-get props :title))))
-      (setf (cddr ret)
-            (mapcar (lambda (child) (org-e-caldav-element-copy child ret))
-                    (cddr element)))
-      ret))
-   (t
-    (error (concat "copy-element shouldn't be called on sequences,"
-                   "which are no org-element elements")))))
-
 (defun org-e-caldav-headline-to-event (headline timestamp)
   "Return event structure for a headline. An additional
 property :headline contains the associated org-element structure."
@@ -711,6 +686,30 @@ e
                  (setcdr lpair event))
                (org-e-caldav-event-to-headline event headline)))))
 
+(defun org-e-caldav-element-copy (element parent)
+  "Return a deep copy of an org-element element."
+  (cond
+   ((stringp element)
+    (let ((ret (copy-sequence element)))
+      (put-text-property 0 (length ret) :parent parent ret)
+      ret))
+   ((and (consp element)
+         (symbolp (car element)))
+    (let* ((type (car element))
+           (props (copy-sequence (cadr element)))
+           (ret (list type props)))
+      (plist-put props :parent parent)
+      (when (eq type 'headline)
+        (plist-put props :title
+                   (mapcar (lambda (child) (org-e-caldav-element-copy child ret))
+                           (plist-get props :title))))
+      (setf (cddr ret)
+            (mapcar (lambda (child) (org-e-caldav-element-copy child ret))
+                    (cddr element)))
+      ret))
+   (t
+    (error (concat "copy-element shouldn't be called on sequences,"
+                   "which are no org-element elements")))))
 
 (defun org-e-caldav-merge-conflict (conflict uidsreset-add local-doc-updates-add)
   "For a conflict, add the two conflicting headlines next to each
