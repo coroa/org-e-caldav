@@ -82,6 +82,9 @@
 (defvar org-e-caldav-uid-property "CALDAVUID"
   "Property name in which to save the associated caldav uid.")
 
+(defvar org-e-caldav-conflicts-buffer "*Org-e-caldav conflicts*"
+  "Name of the conflict buffer")
+
 ;; Internal state variables
 
 ;;; The following state definitions and functions come literally from
@@ -138,31 +141,6 @@ and the :parent property of the timestamp element."
 (defun org-e-caldav-load-state ()
   "Load org-e-caldav state from `org-e-caldav-state-file'."
   (load org-e-caldav-state-file 'noerror nil))
-
-(defvar org-e-caldav-conflicts-buffer "*Org-e-caldav conflicts*"
-  "Name of the conflict buffer")
-
-(defun org-e-caldav-show-conflicts (conflicts)
-  "Show conflicts CONFLICTS, which looks like
-   ((file1 lev1 . rev1) (file2 lev2 . rev2) ..)
-in conflict window."
-  (when conflicts
-    (let ((buf (get-buffer-create org-e-caldav-conflicts-buffer)))
-      (with-help-window buf
-        (with-current-buffer buf
-          (erase-buffer)
-          (org-mode)
-          (insert "There were some conflicts while merging. Here
-are links to the problematic items. Edit the files to contain,
-what you want to keep and sync again. The :sync property tells
-you their origin.\n\n")
-          
-          (loop for (file . cfs) in conflicts do
-                (loop for (lev . rev) in cfs do
-                      (insert (format "- %s (in [[file:%s::*%s][%s]])\n"
-                                      (plist-get lev :summary) file
-                                      (plist-get lev :summary) file)
-                              "\n"))))))))
 
 ;;; A few functions from org-caldav.el by David Engster
 
@@ -851,6 +829,28 @@ remote event."
   "Delete event with UID from calendar."
   (org-e-caldav-debug-print (format "Deleting event UID %s.\n" uid))
   (url-dav-delete-file (concat org-e-caldav-url uid ".ics")))
+
+(defun org-e-caldav-show-conflicts (conflicts)
+  "Show conflicts CONFLICTS, which looks like
+   ((file1 lev1 . rev1) (file2 lev2 . rev2) ..)
+in conflict window."
+  (when conflicts
+    (let ((buf (get-buffer-create org-e-caldav-conflicts-buffer)))
+      (with-help-window buf
+        (with-current-buffer buf
+          (erase-buffer)
+          (org-mode)
+          (insert "There were some conflicts while merging. Here
+are links to the problematic items. Edit the files to contain,
+what you want to keep and sync again. The :sync property tells
+you their origin.\n\n")
+          
+          (loop for (file . cfs) in conflicts do
+                (loop for (lev . rev) in cfs do
+                      (insert (format "- %s (in [[file:%s::*%s][%s]])\n"
+                                      (plist-get lev :summary) file
+                                      (plist-get lev :summary) file)
+                              "\n"))))))))
 
 (defun org-e-caldav-sync ()
   (interactive)
