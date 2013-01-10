@@ -881,7 +881,8 @@ you their origin.\n\n")
 
     (org-e-caldav-show-conflicts conflicts))
   (org-e-caldav-write-state)
-  (org-e-caldav-debug-print "Finished sync.\n"))
+  (org-e-caldav-debug-print "Finished sync.\n")
+  (message "Synchronization complete."))
 
 (provide 'org-e-caldav)
 
