@@ -88,6 +88,12 @@
 (defvar org-e-caldav-uid-property "CALDAVUID"
   "Property name in which to save the associated caldav uid.")
 
+(defvar org-e-caldav-sync-property "CALDAVSYNC"
+  "Property name by which to mark conflicts.")
+
+(defvar org-e-caldav-delete-property "CALDAVDELETE"
+  "Property name by which to mark deletes.")
+
 (defvar org-e-caldav-conflicts-buffer "*Org-e-caldav conflicts*"
   "Name of the conflict buffer")
 
@@ -303,7 +309,7 @@ event."
     
     (with-current-buffer (flet ((url-cache-extract (x) nil))
                            (url-retrieve-synchronously
-                            (concat org-e-caldav-url (concat uid ".ics"))))
+                            (concat org-e-caldav-url uid ".ics")))
       (case url-http-response-status
         (304 old-pair)
         (200 (delete-region
@@ -367,8 +373,9 @@ update the first found property drawer underneath."
 (defun org-e-caldav-event-to-headline (event &optional headline level)
   "Create a new org-element headline or update an existing
 one. Returns the innermost changed org-element structure."
-  (let ((drawer-alist `((,org-e-caldav-uid-property . ,(plist-get event :uid))
-                        ("sync" . ,(plist-get event :sync))))
+  (let ((drawer-alist (list (cons org-e-caldav-uid-property (plist-get event :uid))
+                            (cons org-e-caldav-sync-property (plist-get event :sync))
+                            (cons org-e-caldav-delete-property (plist-get event :delete))))
         (summary (plist-get event :summary))
         (description (plist-get event :description))
         (timestamp (plist-get event :timestamp)))
@@ -393,13 +400,20 @@ one. Returns the innermost changed org-element structure."
              (new-contents (if (equal description old-description)
                                (org-element-contents section)
                              (nconc rbasket (list description)))))
-
-        (unless (equal timestamp old-timestamp)
-          (org-element-put-property timestamp :parent (org-element-property :parent old-timestamp))
-          (setcdr old-timestamp (cdr timestamp)))
-
+        
         (unless (org-element-property :parent new-drawer)
           (push (org-element-put-property new-drawer :parent section) new-contents))
+
+        (when (and timestamp (not (equal timestamp old-timestamp)))
+          (org-element-put-property timestamp :parent (org-element-property :parent old-timestamp))
+
+          ;; preserve the repeater-type if possible
+          (let ((old-repeater-type (org-element-property :repeater-type old-timestamp)))
+            (when (and old-repeater-type (org-element-propertey :repeater-type timestamp))
+              (org-element-put-property timestamp :repeater-type
+                                        (org-element-property :repeater-type old-timestamp))))
+          
+          (setcdr old-timestamp (cdr timestamp)))
 
         (apply 'org-element-set-contents section new-contents)
         
@@ -458,7 +472,8 @@ property :headline contains the associated org-element structure."
                             (car (org-element-property :title headline)))
                  :description ,(org-e-caldav-extract-description-from-section
                                 (car (org-element-contents headline)))
-                 :sync ,(cdr (assoc "sync" prop-alist))
+                 :sync ,(cdr (assoc-string org-e-caldav-sync-property prop-alist))
+                 :delete ,(cdr (assoc-string org-e-caldav-delete-property prop-alist))
                  :headline ,headline))))
 
 (defun org-e-caldav-element-closest (elem types fun)
@@ -480,8 +495,8 @@ timestamp, just the first one is used though."
                       'headline
                       (lambda (hl)
                         (let ((ts (org-element-map
-                                   'timestamp
                                    (cons 'org-data (cdr hl))
+                                   'timestamp
                                    (lambda (ts) (when (memq (org-element-property :type ts)
                                                       '(active active-range)) ts))
                                    nil t 'headline)))
@@ -597,43 +612,50 @@ where the ev are normal events."
         lups rups conflicts)
 
     ;; add all remote bugs
-          (let* ((rpair (assoc uid remote))
-                 (rev (cdr rpair)))
-
-            (when (null uid)
-              (setq uid (loop for uid = (concat (format-time-string "%Y%m%dT%H%M%SZ" nil t)
-                                                (format "-%d@%s" (random 10000) system-name))
-                              while (memq uid ruidlist)
-                              finally return uid))
-              (plist-put lev :uid uid)
-              (funcall luidlist-add uid))
-
-            ;; if there's a local event with the same uid, we have a
-            ;; conflict
-
-            ;; if the local event has a sync prop, it was merged by
-            ;; the user, so we keep the local one (which might be the
-            ;; remote from a previous sync)
-
-            (cond
-             ((and rpair
-                   (null (plist-get lev :sync)))
-              (when (org-e-caldav-event-diff lev rev)
-                (push (cons (plist-put (copy-sequence lev) :sync 'conflict-local)
-                            (plist-put (copy-sequence rev) :sync 'conflict-remote))
-                      conflicts)))
-             ((null lev)
-              (funcall delete-add uid))
-             (t
-              (push lev rups)
-              (when (or (plist-get lev :sync)
-                        (org-e-caldav-event-diff lev (cdr (assoc uid state))))
-                (plist-put lev :sync nil)
-                (push lev lups))))
     (cl-loop for (uid . lev) in local do
+             (let* ((rpair (assoc uid remote))
+                    (rev (cdr rpair)))
+
+               (when (null uid)
+                 (setq uid (cl-loop for uid = (concat (format-time-string "%Y%m%dT%H%M%SZ" nil t)
+                                                      (format "-%d@%s" (random 10000) system-name))
+                                    while (memq uid ruidlist)
+                                    finally return uid))
+                 (plist-put lev :uid uid)
+                 (funcall luidlist-add uid))
+
+               ;; if there's a local event with the same uid, we have a
+               ;; conflict
+
+               ;; if the local event has a sync prop, it was merged by
+               ;; the user, so we keep the local one (which might be the
+               ;; remote from a previous sync)
+
+               (cond
+                ((and lev
+                      rpair
+                      (null (plist-get lev :sync)))
+                 (when (org-e-caldav-event-diff lev rev)
+                   (push (cons (plist-put (copy-sequence lev) :sync 'conflict-local)
+                               (plist-put (or (copy-sequence rev)
+                                              `(:uid ,uid :delete t))
+                                          :sync 'conflict-remote))
+                         conflicts)))
+                ((null lev)
+                 (funcall delete-add uid))
+                ((plist-get lev :delete)
+                 (funcall delete-add uid)
+                 (funcall luidlist-delete uid)
+                 (push lev lups))
+                (t
+                 (push lev rups)
+                 (when (or (plist-get lev :sync)
+                           (org-e-caldav-event-diff lev (cdr (assoc uid state))))
+                   (plist-put lev :sync nil)
+                   (push lev lups))))
             
-            ;; mark it
-            (puthash uid t added)))
+               ;; mark it
+               (puthash uid t added)))
 
     ;; add changed remote events which are the unmarked events in local
     (cl-loop for (uid . rev) in remote do
@@ -786,6 +808,7 @@ other to the org-element tree."
         (let* ((state (org-e-caldav-get-state file))
                (luidlist (delq nil (mapcar (lambda (x) (car x)) (plist-get local :events))))
                (luidlist-add (lambda (x) (push x luidlist)))
+               (luidlist-delete (lambda (x) (cl-callf2 delete x luidlist)))
                uidsreset (uidsreset-add (lambda (x) (push x uidsreset)))
                (remote
                 `(:events
@@ -793,7 +816,8 @@ other to the org-element tree."
                (local-diff (org-e-caldav-eventlist-diff state local))
                (remote-diff (org-e-caldav-eventlist-diff state remote))
                (merge (org-e-caldav-prepare-merge local-diff remote-diff state
-                                                  luidlist-add delete-add)))
+                                                  luidlist-add luidlist-delete
+                                                  delete-add)))
 
           (mapc  (lambda (x) (org-e-caldav-merge-remote x uidsreset-add))
                  (plist-get merge :remote-updates))
