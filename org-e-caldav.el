@@ -504,7 +504,7 @@ property :headline contains the associated org-element structure."
                  :sync ,(cdr (assoc "sync" prop-alist))
                  :headline ,headline))))
 
-(defun org-element-closest (elem types fun)
+(defun org-e-caldav-element-closest (elem types fun)
   "Traverse upwards through its ancestors, stop at the first
 match for which FUN doesn't return nil and return that value."
   (unless (listp types) (setq types (list types)))
@@ -512,9 +512,9 @@ match for which FUN doesn't return nil and return that value."
     (when parent
       (or (and (memq (org-element-type parent) types)
                (funcall fun parent))
-          (org-element-closest parent types fun)))))
+          (org-e-caldav-element-closest parent types fun)))))
 
-(defun org-element-update-buffer (updates local-doc)
+(defun org-e-caldav-element-update-buffer (updates local-doc)
   "Updates the current buffer according to the list updates,
 which has the form '( elem1 elem2 elem3 ... ). Nested elements
 are ignored.
@@ -561,7 +561,7 @@ org-element-swap-A-B."
 represented by a headline containing an active timestamp."
   `(:events
     ,(mapcar (lambda (ts) (org-e-caldav-headline-to-event
-                      (org-element-closest ts 'headline 'identity) ts))
+                      (org-e-caldav-element-closest ts 'headline 'identity) ts))
              (org-element-map doc
                               'timestamp
                               (lambda (x)
@@ -709,7 +709,7 @@ where the ev are normal events."
               as (ruid . ev) = (org-e-caldav-fetch-event uid state) do
               (org-e-caldav-merge-new-local ev state local-doc-updates-add local-doc 1))
         
-        (org-element-update-buffer local-doc-updates local-doc)
+        (org-e-caldav-element-update-buffer local-doc-updates local-doc)
         (org-e-caldav-set-state inbox-file state)
 
         (message "Synchronization of file \"%s\" complete." inbox-file)))))
@@ -764,7 +764,7 @@ where the ev are normal events."
           (mapc (lambda (x) (org-e-caldav-merge-conflict x uidsreset-add local-doc-updates-add))
                 (plist-get merge :conflicts))
 
-          (org-element-update-buffer local-doc-updates local-doc)
+          (org-e-caldav-element-update-buffer local-doc-updates local-doc)
 
           (org-e-caldav-set-state file local uidsreset)
           (message "Synchronization of file \"%s\" complete." file)
