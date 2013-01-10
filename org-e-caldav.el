@@ -615,7 +615,8 @@ where the ev are normal events."
               (funcall delete-add uid))
              (t
               (push lev rups)
-              (when (org-e-caldav-event-diff lev (cdr (assoc uid state)))
+              (when (or (plist-get lev :sync)
+                        (org-e-caldav-event-diff lev (cdr (assoc uid state))))
                 (plist-put lev :sync nil)
                 (push lev lups))))
             
