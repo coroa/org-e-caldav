@@ -67,3 +67,15 @@ only 2 bad things can happen:
 
 ** during adding new remote events locally
 nothing happens
+
+* TODO depends on obsolete cl macro flet
+cl-flet and cl-letf are no replacement as they use lexical scope
+instead of dynamical scope and wouldn't work in this case
+
+the problem is that url-retrieve tries to act on 403 not modified by
+extracting the page from its cache, where it wouldn't find it and
+error out, because we add the If-Last-Modified-Since header on our
+own. so to stop url-retrieve from doing so, i'm temporarily mapping
+url-cache-extract to the nil function.
+
+** TODO ask on the emacs mailinglist for another solution
