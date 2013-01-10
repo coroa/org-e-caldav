@@ -472,15 +472,20 @@ match for which FUN doesn't return nil and return that value."
 
 (defun org-e-caldav-find-events (doc)
   "Find a list of events in the current buffer. An event is
-represented by a headline containing an active timestamp."
+represented by a headline containing at least one active
+timestamp, just the first one is used though."
   `(:events
-    ,(mapcar (lambda (ts) (org-e-caldav-headline-to-event
-                      (org-e-caldav-element-closest ts 'headline 'identity) ts))
-             (org-element-map doc
-                              'timestamp
-                              (lambda (x)
-                                (when (memq (org-element-property :type x)
-                                            '(active active-range)) x))))))
+    ,(org-element-map doc
+                      'headline
+                      (lambda (hl)
+                        (let ((ts (org-element-map
+                                   'timestamp
+                                   (cons 'org-data (cdr hl))
+                                   (lambda (ts) (when (memq (org-element-property :type ts)
+                                                      '(active active-range)) ts))
+                                   nil t 'headline)))
+                          (when ts
+                            (org-e-caldav-headline-to-event hl ts)))))))
 
 (defun org-e-caldav-element-update-buffer (updates local-doc)
   "Updates the current buffer according to the list updates,
