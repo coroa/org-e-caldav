@@ -776,6 +776,7 @@ where the ev are normal events."
 (defun org-e-caldav-sync ()
   (interactive)
   (org-e-caldav-debug-print "Starting sync.\n")
+  (org-e-caldav-load-state)
   (let* ((files (adjoin org-e-caldav-inbox org-e-caldav-files))
          (updated (make-hash-table :test 'equal))
          (updated-append (lambda (x) (mapc (lambda (y) (puthash y t updated)) x)))
@@ -793,6 +794,7 @@ where the ev are normal events."
     (org-e-caldav-sync-new-remotes org-e-caldav-inbox filter-updated)
 
     (org-e-caldav-show-conflicts conflicts))
+  (org-e-caldav-write-state)
   (org-e-caldav-debug-print "Finished sync.\n"))
 
 
