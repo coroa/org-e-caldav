@@ -17,7 +17,7 @@ Date:   Thu Jan 10 13:57:37 2013 +0100
 
 org-element: Correctly interpret timestamps ranges with repeaters
 
-** ❢ Add info about minimal release somewhere?
+** ❢ Add info about minimal needed version somewhere?
 
 * ❢ repeater-type is not synced (is there an ical equivalent?) and might be lost locally
 when parsing the ical repeater info into an org-element timestamp
@@ -35,3 +35,22 @@ the others are preserved but ignored.
 
 has ical a possibility for more than one time per event or would we
 need to add multiple events? how would we store the different UIDS?
+
+* ❢ connection drops during a sync aren't handled gracefully
+
+any return code from the caldav server upon retrieval of an
+event which is not in (304 200 404) will be answered with
+(error "Couldn't retrieve event") and thus abort the sync.
+
+** during normal sync of existing events
+only 2 bad things can happen:
+
+1. events which have been marked for remote deletion are forgotten and
+   then synced as new events to the inbox on the next run.
+2. the state is not written back to disk (so if you quit or crashed
+   emacs before the next sync or calling org-e-caldav-write-state
+   yourself you would have an old version of the state on the next
+   run and you might have to resolve a bunch of conflicts)
+
+** during adding new remote events locally
+nothing happens, literally

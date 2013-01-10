@@ -139,6 +139,7 @@ and the :parent property of the timestamp element."
 
 (defun org-e-caldav-write-state ()
   "Write org-e-caldav state to `org-e-caldav-state-file'."
+  (interactive)
   (with-temp-file org-e-caldav-state-file
     (prin1 `(setq org-e-caldav-state-alist ',org-e-caldav-state-alist)
            (current-buffer))))
@@ -832,9 +833,11 @@ remote event."
              local-doc-updates
              (local-doc-updates-add (lambda (x) (push x local-doc-updates)))
              (state (or (org-e-caldav-get-state inbox-file)
-                        '(:events nil))))
+                        '(:events nil)))
+             (events (mapcar (lambda (uid) (org-e-caldav-fetch-event uid state))
+                             (funcall filter-updated (org-e-caldav-fetch-eventlist)))))
 
-        (loop for uid in (funcall filter-updated (org-e-caldav-fetch-eventlist))
+        (loop for uid in events
               as (ruid . ev) = (org-e-caldav-fetch-event uid state) do
               (org-e-caldav-merge-new-local ev state local-doc-updates-add local-doc 1))
         
