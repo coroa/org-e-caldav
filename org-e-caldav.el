@@ -51,8 +51,13 @@
 ;; - Set `org-e-caldav-inbox' to an org filename where new entries from
 ;;   the calendar should be stored.
 ;;
-;; Call `org-e-caldav-sync' to start the sync. The URL package will ask
-;; you for username/password for accessing the calendar.
+;; Call `org-e-caldav-sync' to start the sync. The URL package will
+;; ask you for username/password for accessing the calendar. Its
+;; implementation of digest authentication is already a bit older
+;; (follows obsolete rfc2069 instead of current rfc2617, but which is
+;; backwards compatible if correctly implemented) and at least doesn't
+;; work with DigestAuthentication of DAVServers derived from SabreDAV
+;; as for example Baikal.
 
 
 ;;; Code:
