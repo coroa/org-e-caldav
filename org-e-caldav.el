@@ -573,7 +573,7 @@ The form of the alist is ((:property . (valueA valueB)...)"
      (loop for (uid . ev) in b-evs
            if (null uid) collect (cons nil ev)))))
 
-(defun org-e-caldav-prepare-merge (local remote luidlist-add delete-add)
+(defun org-e-caldav-prepare-merge (local remote state luidlist-add delete-add)
   "From LOCAL diff and REMOTE diff compute the necessary local
 and remote changes and sort them into a plist with the
 structure (:local-updates (..)
@@ -606,17 +606,18 @@ where the ev are normal events."
 
             (cond
              ((and rpair
-                   (null (plist-get lev :sync))
-                   (org-e-caldav-event-diff lev rev))
-              (push (cons (plist-put (copy-sequence lev) :sync 'conflict-local)
-                          (plist-put (copy-sequence rev) :sync 'conflict-remote))
-                    conflicts))
+                   (null (plist-get lev :sync)))
+              (when (org-e-caldav-event-diff lev rev)
+                (push (cons (plist-put (copy-sequence lev) :sync 'conflict-local)
+                            (plist-put (copy-sequence rev) :sync 'conflict-remote))
+                      conflicts)))
              ((null lev)
               (funcall delete-add uid))
              (t
-              (plist-put lev :sync nil)
               (push lev rups)
-              (push lev lups)))
+              (when (org-e-caldav-event-diff lev (cdr (assoc uid state)))
+                (plist-put lev :sync nil)
+                (push lev lups))))
             
             ;; mark it
             (puthash uid t added)))
@@ -777,7 +778,7 @@ other to the org-element tree."
                   ,(mapcar (lambda (x) (org-e-caldav-fetch-event x state)) luidlist)))
                (local-diff (org-e-caldav-eventlist-diff state local))
                (remote-diff (org-e-caldav-eventlist-diff state remote))
-               (merge (org-e-caldav-prepare-merge local-diff remote-diff
+               (merge (org-e-caldav-prepare-merge local-diff remote-diff state
                                                   luidlist-add delete-add)))
 
           (mapc  (lambda (x) (org-e-caldav-merge-remote x uidsreset-add))
