@@ -901,10 +901,10 @@ you their origin.\n\n")
   (org-e-caldav-debug-print "Starting sync.")
   (org-e-caldav-check-connection)
   (org-e-caldav-load-state)
-  (let* ((files (adjoin org-e-caldav-inbox org-e-caldav-files))
+  (let* ((files (cl-adjoin org-e-caldav-inbox org-e-caldav-files))
          (updated (make-hash-table :test 'equal))
          (updated-append (lambda (x) (mapc (lambda (y) (puthash y t updated)) x)))
-         (filter-updated (lambda (x) (loop for y in x unless (gethash y updated) collect y)))
+         (filter-updated (lambda (x) (cl-loop for y in x unless (gethash y updated) collect y)))
          deleted
          (delete-add (lambda (x) (push x deleted)))
          (conflicts
