@@ -70,8 +70,8 @@
 
 (defvar org-e-caldav-url (concat "https://www.google.com/calendar/dav/"
                                  "ID@group.calendar.google.com"
-                                 "/events/")
-  "Calendar URL for CalDAV access. The following '/' is mandatory.")
+                                 "/events")
+  "Calendar URL for CalDAV access. May NOT end with '/'.")
 
 (defvar org-e-caldav-files '("~/org/appointments.org")
   "List of files which should end up in calendar.
@@ -310,7 +310,7 @@ event."
     
     (with-current-buffer (flet ((url-cache-extract (x) nil))
                            (url-retrieve-synchronously
-                            (concat org-e-caldav-url uid ".ics")))
+                            (concat org-e-caldav-url "/" uid ".ics")))
       (case url-http-response-status
         (304 old-pair)
         (200 (delete-region
@@ -690,7 +690,7 @@ The value returned is a list of duplicated ids."
     (org-e-caldav-debug-print (format "Putting event \"%s\" UID %s."
                                       (plist-get event :summary) uid))
     (unless (url-dav-save-resource
-             (concat org-e-caldav-url uid ".ics")
+             (concat org-e-caldav-url "/" uid ".ics")
              (encode-coding-string
               (org-e-caldav-event-to-ical event)
               'utf-8-dos) "text/calendar; charset=UTF-8")
@@ -873,7 +873,7 @@ remote event."
 (defun org-e-caldav-delete-event (uid)
   "Delete event with UID from calendar."
   (org-e-caldav-debug-print (format "Deleting event UID %s." uid))
-  (url-dav-delete-file (concat org-e-caldav-url uid ".ics")))
+  (url-dav-delete-file (concat org-e-caldav-url "/" uid ".ics")))
 
 (defun org-e-caldav-show-conflicts (conflicts)
   "Show conflicts CONFLICTS, which looks like
