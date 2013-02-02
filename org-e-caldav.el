@@ -158,10 +158,12 @@ and the :parent property of the timestamp element."
 ;;; A few functions from org-caldav.el by David Engster
 
 (defun org-e-caldav-check-connection ()
-  "Checking connection by doing a PROPFIND on CalDAV URL."
-  (org-e-caldav-debug-print (format "Checking connection - doing a PROPFIND on %s."
+  "Check connection by doing a PROPFIND on CalDAV URL."
+  (org-e-caldav-debug-print (format "Check connection for %s."
 				  org-e-caldav-url))
-  (let ((output (url-dav-request org-e-caldav-url "PROPFIND" nil nil 1)))
+  (let ((output (url-dav-get-properties
+		 org-e-caldav-url
+		 '(DAV:resourcetype) 0)))
   (unless (eq (plist-get (cdar output) 'DAV:status) 200)
     (org-e-caldav-debug-print "Got error status from PROPFIND: " output)
     (error "Could not query CalDAV URL %s." org-e-caldav-url)))
@@ -320,6 +322,7 @@ event."
                      (match-beginning 0)))
              (cons uid (org-e-caldav-ical-to-event uid)))
         (404 (cons uid nil))
+        (410 (cons uid nil))
         (t   (error "Couldn't retrieve event"))))))
 
 (defun org-e-caldav-fetch-eventlist ()
