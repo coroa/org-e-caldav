@@ -390,7 +390,7 @@ one. Returns the innermost changed org-element structure."
                        (section nil                          
                                 ,(org-e-caldav-alist-to-property-drawer drawer-alist)
                                 ,timestamp
-                                ,description))
+                                ,(concat "\n\n" description)))
           (error "Need a headline level to create a new headline."))
       
       (let* ((section (org-element-map (cons 'org-data (cdr headline))
