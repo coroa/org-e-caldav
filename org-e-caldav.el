@@ -142,7 +142,8 @@ and the :parent property of the timestamp element."
 
 (defun org-e-caldav-get-state (file)
   "Return the EVENTLIST for FILE in state or nil."
-    (cdr (assoc file org-e-caldav-state-alist)))
+  (or (cdr (assoc file org-e-caldav-state-alist))
+      '(:events nil)))
 
 (defun org-e-caldav-write-state ()
   "Write org-e-caldav state to `org-e-caldav-state-file'."
@@ -327,7 +328,7 @@ event."
 
 (defun org-e-caldav-fetch-eventlist ()
   "Fetch list of events from remote calendar."
-  (mapcar 'file-name-sans-extension
+  (mapcar 'file-name-base
           (url-dav-directory-files org-e-caldav-url nil "\\.ics$")))
 
 (defun org-e-caldav-find-property-drawer (elem)
@@ -860,8 +861,7 @@ remote event."
       (let* ((local-doc (org-element-parse-buffer))
              local-doc-updates
              (local-doc-updates-add (lambda (x) (push x local-doc-updates)))
-             (state (or (org-e-caldav-get-state inbox-file)
-                        '(:events nil)))
+             (state (org-e-caldav-get-state inbox-file))
              (events (mapcar (lambda (uid) (org-e-caldav-fetch-event uid state))
                              (funcall filter-updated (org-e-caldav-fetch-eventlist)))))
 
