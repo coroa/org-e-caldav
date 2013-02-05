@@ -624,7 +624,7 @@ where the ev are normal events."
                (when (null uid)
                  (setq uid (cl-loop for uid = (concat (format-time-string "%Y%m%dT%H%M%SZ" nil t)
                                                       (format "-%d@%s" (random 10000) system-name))
-                                    while (memq uid ruidlist)
+                                    while (member uid ruidlist)
                                     finally return uid))
                  (plist-put lev :uid uid)
                  (funcall luidlist-add uid))
@@ -647,7 +647,8 @@ where the ev are normal events."
                                           :sync 'conflict-remote))
                          conflicts)))
                 ((null lev)
-                 (funcall delete-add uid))
+                 (when (member uid ruidlist)
+                   (funcall delete-add uid)))
                 ((plist-get lev :delete)
                  (funcall delete-add uid)
                  (funcall luidlist-delete uid)
@@ -826,7 +827,7 @@ other to the org-element tree."
 
           (mapc  (lambda (x) (org-e-caldav-merge-remote x uidsreset-add))
                  (plist-get merge :remote-updates))
-          (mapc (lambda (x) (unless (memq (plist-get x :uid) uidsreset)
+          (mapc (lambda (x) (unless (member (plist-get x :uid) uidsreset)
                          (org-e-caldav-merge-local x local local-doc-updates-add)))
                 (plist-get merge :local-updates))
 
