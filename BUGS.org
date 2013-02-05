@@ -1,4 +1,4 @@
-#+TODO: TODO | DONE
+#+TODO: TODO SEMI | DONE
 
 * TODO local deletions don't check for conflicts
 if between two syncs the local event is deleted and the remote one
@@ -9,11 +9,15 @@ the problem is that it could have been a refile as well, which means
 all the deletion, conflict decision, can only be done in a last step,
 which would need to know the previous state as well.
 
+a new version which fixes this and a couple of other complications by
+keeping track of all files at the same time is being developed in the
+org-sync branch (still conceptual phase, though)
+
 * TODO newlines are sometimes lost or added on a remote change of the events description or timestamps
 probably due to ignored :post-blank, :pre-blank properties in the
 reconstructed headline.
 
-* TODO org-element-timestamp-interpreter forgets the repeater information of range timestamps
+* SEMI org-element-timestamp-interpreter forgets the repeater information of range timestamps
 http://thread.gmane.org/gmane.emacs.orgmode/64489
 
 this means that remote changes to a range timestamp with repeating
@@ -30,7 +34,7 @@ org-element: Correctly interpret timestamps ranges with repeaters
 
 ** TODO Add info about minimal needed version somewhere?
 
-* TODO repeater-type is not synced (is there an ical equivalent?) and might be lost locally
+* SEMI repeater-type is not synced (is there an ical equivalent?) and might be lost locally
 when parsing the ical repeater info into an org-element timestamp
 the :repeater-type is assumed to be cummulate (those with one +).
 
@@ -52,7 +56,7 @@ need to add multiple events? how would we store the different UIDS?
 * TODO connection drops during a sync aren't handled gracefully
 
 any return code from the caldav server upon retrieval of an
-event which is not in (304 200 404) will be answered with
+event which is not in (304 200 404 410) will be answered with
 (error "Couldn't retrieve event") and thus abort the sync.
 
 ** during normal sync of existing events
@@ -79,3 +83,4 @@ own. so to stop url-retrieve from doing so, i'm temporarily mapping
 url-cache-extract to the nil function.
 
 ** TODO ask on the emacs mailinglist for another solution
+** TODO implement etags instead
